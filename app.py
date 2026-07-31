@@ -1,14 +1,17 @@
 """Streamlit UI: guided 5-step self-service estimation wizard (EAP.M1.UI1),
-plus the preliminary SOW outline action (EAP.M1.UI2).
+plus the preliminary SOW outline action (EAP.M1.UI2), phase/resource
+planning (EAP.M2), and baseline cost/rate card (EAP.M3).
 
 Collects inputs and displays outputs only -- no business formulas live in
 this file. All authoritative calculation happens in
-src/complexity_engine.py, src/sizing_engine.py, and src/contract_fit.py,
-unchanged since MVP.M1. src/scope_defaults.py, src/assumption_engine.py,
-src/running_estimate_preview.py, and src/sow_outline_engine.py are
-non-authoritative UI-support helpers (scope defaults/counts, template-based
-assumptions, a preliminary display-only complexity preview, and the
-preliminary SOW outline generator, respectively).
+src/complexity_engine.py, src/sizing_engine.py, src/contract_fit.py
+(unchanged since MVP.M1), src/phase_planner.py and src/resource_planner.py
+(unchanged since MVP.M2), and src/pricing_engine.py (MVP.M3). src/
+scope_defaults.py, src/assumption_engine.py, src/running_estimate_preview.py,
+and src/sow_outline_engine.py are non-authoritative UI-support helpers
+(scope defaults/counts, template-based assumptions, a preliminary
+display-only complexity preview, and the preliminary SOW outline generator,
+respectively).
 """
 from datetime import datetime
 
@@ -21,6 +24,7 @@ from src.config import ConfigurationError, load_json_config
 from src.contract_fit import calculate_contract_fit, sprint_to_months
 from src.models import COMPLEXITY_DIMENSION_KEYS, ComplexityDimensionAnswer, EstimateRequest, ResourcePlanRow
 from src.phase_planner import build_phase_plan
+from src.pricing_engine import build_baseline_cost, reconcile_rate_state, reset_all_rates, reset_role_rate
 from src.resource_planner import build_resource_plan, load_resource_rules
 from src.running_estimate_preview import compute_preliminary_view
 from src.scope_defaults import (
@@ -90,6 +94,9 @@ DEFAULTS = {
     "customer_defined_assignments": {},
     "resource_plan_result": None,
     "resource_plan_rows_editable": None,
+    "scenario_rates": {},
+    "rate_override_reasons": {},
+    "baseline_cost_result": None,
 }
 
 
@@ -747,8 +754,6 @@ def render_step_5_review_and_estimate() -> None:
         _render_calculation_transparency()
         _render_action_navigation()
 
-    _render_future_pricing_preview()
-
 
 def _render_executive_results() -> None:
     results = st.session_state["results"]
@@ -881,6 +886,7 @@ def _generate_sow_outline() -> None:
         dimension_display_names=dimension_display_names(),
         generated_at=st.session_state["sow_outline_generated_at"],
         resource_plan=st.session_state["resource_plan_result"],
+        baseline_costing_in_progress=st.session_state["baseline_cost_result"] is not None,
     )
 
 
@@ -918,6 +924,9 @@ def _render_action_navigation() -> None:
 
     if st.session_state["resource_plan_rows_editable"] is not None:
         _render_resource_plan_section()
+
+    if st.session_state["resource_plan_result"] is not None:
+        _render_baseline_cost_section()
 
     if st.session_state["sow_outline_gate"] is not None:
         _render_sow_outline_section()
@@ -1117,6 +1126,172 @@ def estimate_request_ai_enabled() -> bool:
     return results is not None and results["estimate_request"].ai_included != "No"
 
 
+# ---------------------------------------------------------------------------
+# Baseline cost and rate card (EAP.M3)
+# ---------------------------------------------------------------------------
+
+
+def _generate_baseline_cost() -> None:
+    plan = st.session_state["resource_plan_result"]
+    if plan is None:
+        st.session_state["baseline_cost_result"] = None
+        return
+
+    active_roles = set(plan.total_hours_by_role.keys())
+    reconcile_rate_state(active_roles, st.session_state["scenario_rates"], st.session_state["rate_override_reasons"])
+
+    results = st.session_state["results"]
+    unresolved_items_present = bool(results["estimate_request"].items_needing_review) if results else False
+
+    st.session_state["baseline_cost_result"] = build_baseline_cost(
+        resource_plan=plan,
+        scenario_rates=st.session_state["scenario_rates"],
+        override_reasons=st.session_state["rate_override_reasons"],
+        ai_enabled=estimate_request_ai_enabled(),
+        staffing_model=st.session_state["staffing_model"],
+        unresolved_items_present=unresolved_items_present,
+    )
+
+
+def _render_baseline_cost_section() -> None:
+    st.divider()
+    st.markdown("## Baseline delivery cost")
+    st.caption(
+        "Baseline delivery cost only -- no contingency, margin, markup, discount, or customer "
+        "price is calculated here. Rates shown are configured demonstration defaults; scenario "
+        "rates apply only to this session and are never written back to the rate card."
+    )
+
+    _generate_baseline_cost()
+    cost_result = st.session_state["baseline_cost_result"]
+
+    editor_rows = [row for row in cost_result.rows if not row.has_missing_rate]
+
+    if editor_rows:
+        display_df = pd.DataFrame(
+            [
+                {
+                    "Role": row.role,
+                    "Total estimated hours": row.total_estimated_hours,
+                    "Configured default rate": row.configured_default_rate,
+                    "Scenario rate": row.scenario_rate,
+                    "Override reason": row.override_reason or "",
+                    "Role cost": row.role_cost,
+                    "Difference $": row.difference_dollars,
+                    "Difference %": row.difference_percent,
+                }
+                for row in editor_rows
+            ]
+        )
+        edited_df = st.data_editor(
+            display_df,
+            column_config={
+                "Role": st.column_config.TextColumn("Role", disabled=True),
+                "Total estimated hours": st.column_config.NumberColumn("Total estimated hours", disabled=True),
+                "Configured default rate": st.column_config.NumberColumn(
+                    "Configured default rate", disabled=True, format="%.2f"
+                ),
+                "Scenario rate": st.column_config.NumberColumn("Scenario rate", min_value=0.0, step=1.0),
+                "Override reason": st.column_config.TextColumn("Override reason (required if rate differs)"),
+                "Role cost": st.column_config.NumberColumn("Role cost", disabled=True, format="%.2f"),
+                "Difference $": st.column_config.NumberColumn("Difference $", disabled=True, format="%.2f"),
+                "Difference %": st.column_config.NumberColumn("Difference %", disabled=True, format="%.2f"),
+            },
+            hide_index=True,
+            key="baseline_cost_editor",
+        )
+
+        for _, edited_row in edited_df.iterrows():
+            role = edited_row["Role"]
+            configured_default = next(r.configured_default_rate for r in editor_rows if r.role == role)
+            scenario_rate = edited_row["Scenario rate"]
+            reason = (edited_row["Override reason"] or "").strip()
+            if scenario_rate == configured_default:
+                st.session_state["scenario_rates"].pop(role, None)
+                st.session_state["rate_override_reasons"].pop(role, None)
+            else:
+                st.session_state["scenario_rates"][role] = scenario_rate
+                if reason:
+                    st.session_state["rate_override_reasons"][role] = reason
+                else:
+                    st.session_state["rate_override_reasons"].pop(role, None)
+
+        _generate_baseline_cost()
+        cost_result = st.session_state["baseline_cost_result"]
+
+    if cost_result.missing_rate_roles:
+        st.error(
+            "No active configured rate is available for: "
+            + ", ".join(cost_result.missing_rate_roles)
+            + ". Add or activate a rate in data/rate_card.csv before baseline costing can proceed."
+        )
+
+    st.markdown("### Reset scenario rates")
+    active_roles = sorted(st.session_state["resource_plan_result"].total_hours_by_role.keys())
+    reset_cols = st.columns(2)
+    with reset_cols[0]:
+        role_to_reset = st.selectbox(
+            "Reset a single role to its default rate",
+            ["-- Select a role --"] + active_roles,
+            key="w_reset_role_select",
+        )
+        if st.button("Reset this role", key="reset_one_role") and role_to_reset != "-- Select a role --":
+            reset_role_rate(role_to_reset, st.session_state["scenario_rates"], st.session_state["rate_override_reasons"])
+            st.rerun()
+    with reset_cols[1]:
+        if st.button("Reset all scenario rates to defaults", key="reset_all_roles"):
+            reset_all_rates(active_roles, st.session_state["scenario_rates"], st.session_state["rate_override_reasons"])
+            st.rerun()
+
+    st.markdown("### Totals")
+    metric_cols = st.columns(3)
+    with metric_cols[0]:
+        st.metric("Total estimated hours", f"{cost_result.total_estimated_hours:g}")
+    with metric_cols[1]:
+        st.metric("Baseline delivery cost", f"{cost_result.baseline_delivery_cost:,.2f}")
+    with metric_cols[2]:
+        if cost_result.blended_hourly_rate is None:
+            st.metric("Blended hourly rate", "N/A")
+            st.caption("Not available -- total estimated hours are zero.")
+        else:
+            st.metric("Blended hourly rate", f"{cost_result.blended_hourly_rate:,.2f}")
+
+    if cost_result.total_cost_ai_workstream:
+        st.markdown(f"**Core IT workstream cost:** {cost_result.total_cost_core_it:,.2f}")
+        st.markdown(f"**Optional AI workstream cost:** {cost_result.total_cost_ai_workstream:,.2f}")
+
+    st.markdown(f"**Rate overrides in effect:** {len(st.session_state['scenario_rates'])}")
+    if cost_result.missing_rate_roles:
+        st.markdown(f"**Missing rates:** {len(cost_result.missing_rate_roles)}")
+
+    status = cost_result.readiness_status
+    if status == "Ready for Baseline Review":
+        st.success(f"Pricing readiness status: {status}")
+    elif status == "Human Review Required":
+        st.warning(f"Pricing readiness status: {status}")
+    else:
+        st.error(f"Pricing readiness status: {status}")
+
+    if cost_result.readiness_reasons:
+        with st.expander("Readiness details", expanded=(status != "Ready for Baseline Review")):
+            for reason in cost_result.readiness_reasons:
+                st.markdown(f"- {reason}")
+
+    for warning in cost_result.commercial_warnings:
+        st.warning(warning)
+
+    final_rows = [row for row in cost_result.rows if not row.has_missing_rate]
+    with st.expander("How was baseline cost calculated?"):
+        st.markdown("Role cost = total estimated hours × scenario rate (configured default rate unless overridden)")
+        st.markdown("Baseline delivery cost = sum(role cost)")
+        st.markdown("Blended hourly rate = baseline delivery cost ÷ total estimated hours")
+        for row in final_rows:
+            st.markdown(
+                f"- **{row.role}**: {row.total_estimated_hours:g} hours × {row.scenario_rate:,.2f} = "
+                f"{row.role_cost:,.2f}"
+            )
+
+
 def _render_sow_outline_section() -> None:
     gate = st.session_state["sow_outline_gate"]
     st.divider()
@@ -1175,78 +1350,6 @@ def _render_sow_outline_section() -> None:
                 file_name=f"{estimate_name}_preliminary_sow_outline.txt",
                 mime="text/plain",
                 key="sow_download_txt",
-            )
-
-
-# ---------------------------------------------------------------------------
-# Future pricing interaction preview -- illustrative values only
-# ---------------------------------------------------------------------------
-
-
-def _default_rate_preview_rows() -> list[dict]:
-    return [
-        {"Role": "Developer", "Actual hours": 100.0, "Configured default rate": 125.0, "Scenario rate": 125.0, "Override reason": ""},
-        {"Role": "QA", "Actual hours": 40.0, "Configured default rate": 95.0, "Scenario rate": 95.0, "Override reason": ""},
-        {"Role": "Business Analyst", "Actual hours": 30.0, "Configured default rate": 110.0, "Scenario rate": 110.0, "Override reason": ""},
-    ]
-
-
-def _render_future_pricing_preview() -> None:
-    st.divider()
-    with st.expander("Future pricing interaction preview — illustrative values only", expanded=False):
-        st.caption(
-            "This section demonstrates a future role/hours/rate interaction pattern "
-            "(MVP.M3/M4 scaffolding). Values here are illustrative examples only -- they are "
-            "not connected to this estimate and are not a customer quote."
-        )
-
-        if "rate_preview_rows" not in st.session_state:
-            st.session_state["rate_preview_rows"] = _default_rate_preview_rows()
-
-        df = pd.DataFrame(st.session_state["rate_preview_rows"])
-        edited_df = st.data_editor(
-            df,
-            column_config={
-                "Role": st.column_config.TextColumn("Role"),
-                "Actual hours": st.column_config.NumberColumn("Actual hours", min_value=0.0, step=1.0),
-                "Configured default rate": st.column_config.NumberColumn(
-                    "Configured default rate", min_value=0.0, step=1.0, disabled=True
-                ),
-                "Scenario rate": st.column_config.NumberColumn("Scenario rate", min_value=0.0, step=1.0),
-                "Override reason": st.column_config.TextColumn("Override reason (required if rate differs)"),
-            },
-            hide_index=True,
-            key="rate_preview_editor",
-        )
-        st.session_state["rate_preview_rows"] = edited_df.to_dict("records")
-
-        edited_df = edited_df.copy()
-        edited_df["Estimated cost"] = edited_df["Actual hours"] * edited_df["Scenario rate"]
-        st.dataframe(
-            edited_df[["Role", "Actual hours", "Configured default rate", "Scenario rate", "Estimated cost"]],
-            hide_index=True,
-        )
-
-        total_hours = edited_df["Actual hours"].sum()
-        total_cost = edited_df["Estimated cost"].sum()
-        blended_rate = (total_cost / total_hours) if total_hours else None
-        if blended_rate is not None:
-            st.metric("Calculated blended rate (illustrative, read-only)", f"{blended_rate:,.2f}")
-
-        missing_reasons = edited_df[
-            (edited_df["Scenario rate"] != edited_df["Configured default rate"])
-            & (edited_df["Override reason"].fillna("") == "")
-        ]
-        if not missing_reasons.empty:
-            st.warning(
-                "Override reason required for: " + ", ".join(missing_reasons["Role"].tolist())
-            )
-
-        below_default = edited_df[edited_df["Scenario rate"] < edited_df["Configured default rate"]]
-        if not below_default.empty:
-            st.warning(
-                "Illustrative example only -- Commercial risk: the proposed scenario rate is "
-                "below the configured default for " + ", ".join(below_default["Role"].tolist()) + "."
             )
 
 

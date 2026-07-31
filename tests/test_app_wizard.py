@@ -9,11 +9,12 @@ render straight to the target step rather than clicking through every
 earlier selection widget. Tests confined to steps 1-2 (at most one such
 widget touched) use natural click-driven navigation.
 
-st.data_editor (used by the future pricing preview) has no AppTest
-interaction wrapper in this Streamlit version, so that section is verified
-by confirming it renders without exception and its static/initial content
-displays -- not by driving cell edits through AppTest. Manual browser
-verification covers the live edit/recalculation behavior.
+st.data_editor (used by the resource-plan and baseline-cost tables) has no
+AppTest interaction wrapper in this Streamlit version, so those sections
+are verified by confirming they render without exception and their
+static/initial content displays -- not by driving cell edits through
+AppTest. Manual browser verification covers the live edit/recalculation
+behavior.
 """
 from __future__ import annotations
 
@@ -283,21 +284,6 @@ def test_assumptions_generated_and_editable_at_review():
     assert any("Assumption" in ti.label for ti in at.text_input if ti.label)
 
 
-# --- Future pricing preview: renders without error, illustrative only ------
-
-
-def test_future_pricing_preview_renders_without_error_and_is_illustrative():
-    at = AppTest.from_file("app.py")
-    _seed_complete_state(at, step=5)
-    at.run()
-    assert list(at.exception) == []
-    expander_labels = [e.label for e in at.expander]
-    assert any("Future pricing interaction preview" in label for label in expander_labels)
-    caption_text = "\n".join(c.value for c in at.caption)
-    assert "illustrative" in caption_text.lower()
-    assert len(at.dataframe) > 0
-
-
 # --- EAP.M1.UI2: action navigation and preliminary SOW outline --------------
 
 
@@ -354,7 +340,7 @@ def test_outline_shows_mandatory_disclaimer_and_no_pricing_leakage():
         "and incorporated into an executed agreement." in body
     )
     for forbidden in ("Configured default rate", "Scenario rate", "blended rate", "$"):
-        assert forbidden not in body.split("Future pricing interaction preview")[0]
+        assert forbidden not in body
 
 
 def test_outline_shows_edit_and_regenerate_actions_and_download():
@@ -506,6 +492,99 @@ def test_no_pricing_or_rate_functionality_introduced_in_resource_plan_ui():
     _generate_results(at)
     _build_resource_plan(at)
     body = "\n".join(m.value for m in at.markdown).lower()
-    resource_plan_body = body.split("## resource plan", 1)[-1].split("future pricing interaction preview", 1)[0]
+    resource_plan_body = body.split("## resource plan", 1)[-1].split("## baseline delivery cost", 1)[0]
     for forbidden in ("hourly rate", "blended rate", "role cost", "margin", "contingency", "customer price"):
         assert forbidden not in resource_plan_body
+
+
+# --- EAP.M3: baseline cost and rate card -------------------------------------
+
+
+def test_baseline_cost_section_renders_after_resource_plan():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    assert list(at.exception) == []
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Baseline delivery cost" in body
+
+
+def test_baseline_cost_not_shown_before_resource_plan_exists():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Baseline delivery cost" not in body
+
+
+def test_baseline_cost_ready_status_with_balanced_staffing_no_ai():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    # Force every scope item to a resolved status so no "unresolved items"
+    # review trigger fires -- isolates the Ready-status path being tested.
+    at.session_state["scope_checklist"] = {
+        k: ("included" if v == "unknown" else v) for k, v in at.session_state["scope_checklist"].items()
+    }
+    _generate_results(at)
+    _build_resource_plan(at)
+    result = at.session_state["baseline_cost_result"]
+    assert result.readiness_status == "Ready for Baseline Review"
+
+
+def test_baseline_cost_ai_on_triggers_human_review():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    at.session_state["ai_included"] = "Yes"
+    at.session_state["ai_help"] = ["Generate content"]
+    at.session_state["ai_data"] = "Internal business information"
+    at.session_state["ai_human_review"] = "Always"
+    _generate_results(at)
+    _build_resource_plan(at)
+    result = at.session_state["baseline_cost_result"]
+    assert result.readiness_status == "Human Review Required"
+    assert result.total_cost_ai_workstream > 0
+
+
+def test_baseline_cost_reset_controls_present():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    labels = [b.label for b in at.button]
+    assert "Reset this role" in labels
+    assert "Reset all scenario rates to defaults" in labels
+
+
+def test_baseline_cost_zero_hours_shows_not_available_text_not_zero():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    # _render_resource_plan_section() recomputes resource_plan_result from
+    # resource_plan_rows_editable on every rerun, so hours must be zeroed at
+    # that source (not on the derived ResourcePlanResult) to survive a rerun.
+    zeroed_rows = [
+        {**row, "Duration (sprints)": 0.0} for row in at.session_state["resource_plan_rows_editable"]
+    ]
+    at.session_state["resource_plan_rows_editable"] = zeroed_rows
+    at.run()
+    result = at.session_state["baseline_cost_result"]
+    assert result.blended_hourly_rate is None
+    assert result.readiness_status == "Calculation Blocked"
+    body = "\n".join(m.value for m in at.markdown) + "\n".join(c.value for c in at.caption)
+    assert "Not available -- total estimated hours are zero." in body
+
+
+def test_baseline_cost_feeds_status_only_into_sow_outline_no_amounts():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.button(key="generate_sow_outline").click()
+    at.run()
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Baseline internal costing is under review." in body
+    sow_section = body.split("Preliminary SOW Outline", 1)[-1]
+    for forbidden in ("Baseline delivery cost", "Blended hourly rate", "Role cost", "Scenario rate"):
+        assert forbidden not in sow_section

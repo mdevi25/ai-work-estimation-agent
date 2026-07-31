@@ -1,13 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.models import (
-    COMPLEXITY_DIMENSION_KEYS,
-    ComplexityDimensionAnswer,
-    EstimateRequest,
-    RoleRatePreviewRow,
-    RoleRatePreviewSet,
-)
+from src.models import COMPLEXITY_DIMENSION_KEYS, ComplexityDimensionAnswer, EstimateRequest
 
 
 def _complete_complexity_answers():
@@ -83,51 +77,3 @@ def test_estimate_request_rejects_incomplete_complexity_answers():
                 ]
             )
         )
-
-
-def test_role_rate_preview_row_requires_override_reason_when_rate_differs():
-    with pytest.raises(ValidationError):
-        RoleRatePreviewRow(
-            role="Developer",
-            actual_hours=100,
-            configured_default_rate=150,
-            scenario_rate=120,
-        )
-
-
-def test_role_rate_preview_row_allows_same_rate_without_reason():
-    row = RoleRatePreviewRow(
-        role="Developer",
-        actual_hours=100,
-        configured_default_rate=150,
-        scenario_rate=150,
-    )
-    assert row.estimated_cost == 15000
-
-
-def test_role_rate_preview_row_allows_different_rate_with_reason():
-    row = RoleRatePreviewRow(
-        role="Developer",
-        actual_hours=100,
-        configured_default_rate=150,
-        scenario_rate=120,
-        override_reason="Illustrative discount example",
-    )
-    assert row.estimated_cost == 12000
-
-
-def test_role_rate_preview_set_blended_rate():
-    preview = RoleRatePreviewSet(
-        rows=[
-            RoleRatePreviewRow(role="Developer", actual_hours=100, configured_default_rate=150, scenario_rate=150),
-            RoleRatePreviewRow(role="QA", actual_hours=50, configured_default_rate=100, scenario_rate=100),
-        ]
-    )
-    assert preview.total_hours == 150
-    assert preview.total_cost == 15000 + 5000
-    assert preview.blended_rate == pytest.approx(20000 / 150)
-
-
-def test_role_rate_preview_set_blended_rate_none_when_no_hours():
-    preview = RoleRatePreviewSet(rows=[])
-    assert preview.blended_rate is None

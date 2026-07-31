@@ -347,3 +347,39 @@ def test_resource_plan_section_never_contains_pricing_indicators():
         "cost", "margin", "contingency", "price", "payment",
     ):
         assert forbidden not in combined
+
+
+# --- EAP.M3: baseline-costing status-only signal ---------------------------
+
+
+def test_baseline_costing_in_progress_false_by_default_no_extra_text():
+    request = _base_request()
+    sections = _build_outline(request)
+    section_map = dict(sections)
+    assert "baseline internal costing" not in section_map["Document status"].lower()
+
+
+def test_baseline_costing_in_progress_true_adds_status_sentence_only():
+    request = _base_request()
+    complexity = calculate_weighted_complexity({a.dimension_key: a.score for a in request.complexity_answers})
+    sections = build_preliminary_sow_outline(
+        estimate_request=request,
+        complexity_result=complexity,
+        sizing_result=_sizing(),
+        contract_fit_result=_contract_fit(),
+        work_type_label="Enhancement",
+        included_scope_labels=[],
+        excluded_scope_labels=[],
+        unknown_scope_labels=[],
+        dimension_display_names={
+            "functional": "F", "technical": "T", "integration": "I", "data": "D",
+            "testing": "Te", "dependency": "De", "operational_risk": "O",
+        },
+        generated_at="2026-07-31",
+        baseline_costing_in_progress=True,
+    )
+    section_map = dict(sections)
+    assert "Baseline internal costing is under review." in section_map["Document status"]
+    combined = " ".join(body for _, body in sections).lower()
+    for forbidden in ("$", "hourly rate", "blended rate", "role cost", "margin", "override reason"):
+        assert forbidden not in combined

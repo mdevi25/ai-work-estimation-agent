@@ -267,51 +267,57 @@ class ResponsibleAIGateResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-class RoleRatePreviewRow(BaseModel):
-    """Illustrative, non-authoritative scaffolding for a future pricing
-    interaction (MVP.M3/M4). Never consumed by EstimateRequest, any engine,
-    or any customer-facing output in this milestone -- see
-    docs/architecture.md for the boundary and PRICING-RULES.md sections
-    10-13 for the governed shape this scaffolding mirrors.
+PricingReadinessStatus = Literal["Ready for Baseline Review", "Human Review Required", "Calculation Blocked"]
+
+
+class RateCardEntry(BaseModel):
+    """One configured, governed row from data/rate_card.csv. Illustrative/
+    fictional rates only -- see GUARDRAILS.md section 3 and
+    PRICING-RULES.md section 9. Read-only: never mutated by scenario
+    overrides.
     """
 
     role: str
-    actual_hours: float = Field(ge=0)
-    configured_default_rate: float = Field(ge=0)
-    scenario_rate: float = Field(ge=0)
-    override_reason: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _override_reason_required_when_rate_differs(self) -> "RoleRatePreviewRow":
-        if self.scenario_rate != self.configured_default_rate and not self.override_reason:
-            raise ValueError(
-                "An override reason is required when the scenario rate differs from the "
-                "configured default rate"
-            )
-        return self
-
-    @property
-    def estimated_cost(self) -> float:
-        return self.actual_hours * self.scenario_rate
+    default_hourly_rate: float = Field(ge=0)
+    currency: str
+    active: bool
 
 
-class RoleRatePreviewSet(BaseModel):
-    """A collection of illustrative preview rows, plus the read-only,
-    informational blended rate. Illustrative-only -- see RoleRatePreviewRow.
+class RoleCostRow(BaseModel):
+    """One role's baseline-cost line. `configured_default_rate` is always
+    the untouched rate-card value; `scenario_rate`/`override_reason` are
+    the current-scenario override (session-only, never written back to
+    rate_card.csv). `role_cost` and the difference fields are `None` when
+    the role has no resolvable rate (missing-rate case) -- never a
+    fabricated number.
     """
 
-    rows: list[RoleRatePreviewRow] = Field(default_factory=list)
+    role: str
+    total_estimated_hours: float
+    configured_default_rate: Optional[float] = None
+    scenario_rate: Optional[float] = None
+    override_reason: Optional[str] = None
+    currency: Optional[str] = None
+    role_cost: Optional[float] = None
+    difference_dollars: Optional[float] = None
+    difference_percent: Optional[float] = None
+    is_ai_workstream: bool = False
+    has_missing_rate: bool = False
 
-    @property
-    def total_hours(self) -> float:
-        return sum(row.actual_hours for row in self.rows)
 
-    @property
-    def total_cost(self) -> float:
-        return sum(row.estimated_cost for row in self.rows)
+class BaselineCostResult(BaseModel):
+    """Deterministic baseline-cost output. See pricing_engine.py. No
+    contingency, margin, markup, discount, or customer price anywhere on
+    this model -- that is MVP.M4 scope.
+    """
 
-    @property
-    def blended_rate(self) -> Optional[float]:
-        if self.total_hours <= 0:
-            return None
-        return self.total_cost / self.total_hours
+    rows: list[RoleCostRow]
+    total_estimated_hours: float
+    baseline_delivery_cost: float
+    blended_hourly_rate: Optional[float] = None
+    total_cost_core_it: float = 0.0
+    total_cost_ai_workstream: float = 0.0
+    missing_rate_roles: list[str] = Field(default_factory=list)
+    readiness_status: PricingReadinessStatus
+    readiness_reasons: list[str] = Field(default_factory=list)
+    commercial_warnings: list[str] = Field(default_factory=list)

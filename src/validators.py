@@ -6,6 +6,9 @@ correction requiring controlled errors for invalid configuration.
 """
 from __future__ import annotations
 
+import math
+from typing import Optional
+
 from src.config import ConfigurationError
 from src.models import COMPLEXITY_DIMENSION_KEYS
 
@@ -317,3 +320,52 @@ def validate_role_combinations(data: dict) -> None:
     for combo in data["incompatible_combinations"]:
         if not combo.get("roles") or len(combo["roles"]) < 2 or not combo.get("reason"):
             raise ConfigurationError("Each incompatible combination needs at least two roles and a reason")
+
+
+def validate_rate_card(records: list[dict]) -> None:
+    if not records:
+        raise ConfigurationError("rate_card.csv has no rows")
+
+    seen_roles: set[str] = set()
+    for record in records:
+        role = (record.get("Role") or "").strip()
+        if not role:
+            raise ConfigurationError("rate_card.csv has a row with no Role")
+        if role in seen_roles:
+            raise ConfigurationError(f"rate_card.csv has a duplicate Role: '{role}'")
+        seen_roles.add(role)
+
+        raw_rate = record.get("Default Hourly Rate")
+        try:
+            rate = float(raw_rate)
+        except (TypeError, ValueError):
+            raise ConfigurationError(
+                f"rate_card.csv has a non-numeric Default Hourly Rate for '{role}': {raw_rate!r}"
+            ) from None
+        if rate < 0:
+            raise ConfigurationError(f"rate_card.csv has a negative Default Hourly Rate for '{role}'")
+
+        if not (record.get("Currency") or "").strip():
+            raise ConfigurationError(f"rate_card.csv is missing a Currency for '{role}'")
+
+        active_raw = str(record.get("Active", "")).strip().lower()
+        if active_raw not in ("yes", "no", "true", "false", "1", "0"):
+            raise ConfigurationError(f"rate_card.csv has an unrecognized Active value for '{role}': {active_raw!r}")
+
+
+def validate_scenario_rate_value(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Scenario rate must be numeric")
+    if math.isnan(value):
+        raise ValueError("Scenario rate must be numeric")
+    if value < 0:
+        raise ValueError(f"Scenario rate cannot be negative, got {value}")
+    return float(value)
+
+
+def validate_override_reason(scenario_rate: float, default_rate: float, override_reason: Optional[str]) -> None:
+    if scenario_rate != default_rate and not (override_reason or "").strip():
+        raise ValueError(
+            "An override reason is required when the scenario rate differs from the "
+            "configured default rate"
+        )

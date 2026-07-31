@@ -194,6 +194,7 @@ def build_preliminary_sow_outline(
     dimension_display_names: dict[str, str],
     generated_at: str,
     resource_plan: Optional[ResourcePlanResult] = None,
+    baseline_costing_in_progress: bool = False,
 ) -> list[tuple[str, str]]:
     """Build the preliminary outline (21 sections, or 22 when a resource
     plan is supplied -- see the optional "Preliminary phase and resource
@@ -204,6 +205,13 @@ def build_preliminary_sow_outline(
     pricing-preview values, which this module never imports. `resource_plan`
     (MVP.M2) contributes phase/role/hours information only -- no rates,
     cost, or price exist on that model to leak.
+
+    `baseline_costing_in_progress` (MVP.M3) is a status-only boolean --
+    this function never receives or reads a `BaselineCostResult`, a rate
+    card, or any rate/cost value. When True it appends one status sentence
+    ("Baseline internal costing is under review.") to the Document status
+    section; no amount, rate, cost, blended rate, override reason, or
+    commercial warning is ever included (EAP.M3-D1 correction 6).
     """
     templates = _load_outline_templates()
 
@@ -237,8 +245,12 @@ def build_preliminary_sow_outline(
     if not estimate_request.known_dependencies:
         risks.append("No dependencies have been documented yet -- open question for review.")
 
+    document_status_text = "Preliminary Draft. " + GATE_SUCCESS_MESSAGE
+    if baseline_costing_in_progress:
+        document_status_text += " Baseline internal costing is under review."
+
     sections: list[tuple[str, str]] = []
-    sections.append(("Document status", "Preliminary Draft. " + GATE_SUCCESS_MESSAGE))
+    sections.append(("Document status", document_status_text))
     sections.append(("Estimate name", estimate_request.estimate_name))
     sections.append(("Work type", work_type_label))
     sections.append(("Business objective", estimate_request.business_objective))

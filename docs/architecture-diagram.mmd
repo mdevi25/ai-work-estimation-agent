@@ -1,5 +1,5 @@
 ---
-title: AI Work Estimation and Pricing Assistant -- MVP.M1 + EAP.M1.UI1 (Current State)
+title: AI Work Estimation and Pricing Assistant -- MVP.M1-M3 (Current State)
 ---
 flowchart TD
     User["Nontechnical business user"]
@@ -7,41 +7,52 @@ flowchart TD
     subgraph UI["UI layer -- app.py (Streamlit, single-page wizard + persistent sidebar)"]
         Wizard["5-step wizard\n(work type, quick facts, scope checklist,\ncomplexity and AI, review and estimate)"]
         Sidebar["Persistent sidebar\n(step status, current estimate,\nrunning estimate, warnings)"]
+        Actions["Action navigation\n(Preliminary SOW Outline, Build Resource Plan --\nactive; Final SOW / Excel / PowerPoint -- locked)"]
     end
 
     subgraph Helpers["Non-authoritative UI-support helpers -- src/"]
         ScopeDefaults["scope_defaults.py\nscope defaults + confirmation %"]
         AssumptionEngine["assumption_engine.py\ntemplate-based assumptions"]
         RunningPreview["running_estimate_preview.py\n\"Preliminary\" partial-complexity view"]
+        SowOutline["sow_outline_engine.py\nResponsible-AI-style gate +\npreliminary SOW outline builder"]
     end
 
     subgraph Models["src/models.py"]
         EstimateRequest["EstimateRequest\n(assembled at Review step)"]
+        ResourcePlanResult["ResourcePlanResult\n(phases/roles/hours, no cost)"]
+        BaselineCostResult["BaselineCostResult\n(role cost, blended rate,\nreadiness status -- no margin/price)"]
     end
 
-    subgraph Engines["Authoritative engine layer -- src/ (unchanged since MVP.M1)"]
-        ComplexityEngine["complexity_engine.py\nweighted score + contributions"]
-        SizingEngine["sizing_engine.py\nRJS / T-shirt / sprint range"]
-        ContractFit["contract_fit.py\ncontract-fit status"]
+    subgraph Engines["Authoritative engine layer -- src/"]
+        ComplexityEngine["complexity_engine.py\nweighted score + contributions\n(unchanged since MVP.M1)"]
+        SizingEngine["sizing_engine.py\nRJS / T-shirt / sprint range\n(unchanged since MVP.M1)"]
+        ContractFit["contract_fit.py\ncontract-fit status\n(unchanged since MVP.M1)"]
+        PhasePlanner["phase_planner.py\nphases + durations\n(unchanged since MVP.M2)"]
+        ResourcePlanner["resource_planner.py\nroles, person-sprints, hours,\nstaffing views, warnings\n(unchanged since MVP.M2)"]
+        PricingEngine["pricing_engine.py (MVP.M3)\nrole cost, baseline delivery cost,\nblended rate, readiness status"]
     end
 
-    subgraph Config["Configuration -- data/ (governed JSON)"]
+    subgraph Config["Configuration -- data/ (governed JSON + CSV)"]
         Weights["complexity_weights.json"]
         Questions["complexity_questions.json"]
         Bands["sizing_bands.json"]
         Terms["contract_terms.json"]
         ScopeConfig["scope_checklist_items.json"]
         AssumptionConfig["assumption_templates.json"]
+        PhaseRules["phase_rules.json"]
+        ResourceRules["resource_rules.json"]
+        RoleCombos["role_combinations.json"]
+        RateCard["rate_card.csv\n(illustrative/fictional rates only)"]
+        SowTemplates["sow_outline_templates.json"]
     end
 
     HumanReview["Human review point\n(Review step -- Step 5,\nrequired before calculation runs)"]
-
-    subgraph PricingPreview["Future pricing interaction preview -- illustrative only, not authoritative"]
-        RatePreview["RoleRatePreviewRow / RoleRatePreviewSet\nhardcoded example data, never wired\nto EstimateRequest or any calculation"]
-    end
+    ReadinessReview["Human review point\n(pricing-readiness status:\nBlocked > Human Review > Ready)"]
 
     subgraph FutureScope["Not implemented -- deferred"]
-        FuturePlanning["Governed phase/resource planning,\npricing, support, SOW\n(MVP.M2-M6)"]
+        CommercialPricing["Commercial pricing: contingency,\nmargin, gross profit, customer price\n(MVP.M4)"]
+        SupportEstimation["Support estimation\n(MVP.M5)"]
+        FinalSow["Governed final SOW, Excel/PowerPoint\nexport (MVP.M6)"]
         AIAdapter["Estimator's own AI-assisted intake\n(MVP.M7, replaceable interface)"]
     end
 
@@ -67,12 +78,35 @@ flowchart TD
     ContractFit -->|reads| Terms
     ContractFit -->|governed results| Sidebar
     ContractFit -->|governed results| Wizard
-    Wizard -->|displays| User
+    Wizard --> Actions
 
-    Wizard -.->|separate, clearly labeled section| RatePreview
+    Actions -->|"Build Resource Plan"| PhasePlanner
+    PhasePlanner -->|reads| PhaseRules
+    PhasePlanner -->|phases| ResourcePlanner
+    ResourcePlanner -->|reads| ResourceRules
+    ResourcePlanner -->|reads| RoleCombos
+    ResourcePlanner --> ResourcePlanResult
+    ResourcePlanResult -->|editable table + totals| Actions
 
-    Wizard -.->|not built yet| FuturePlanning
+    ResourcePlanResult -->|role hours| PricingEngine
+    PricingEngine -->|reads| RateCard
+    PricingEngine --> BaselineCostResult
+    BaselineCostResult -->|editable scenario-rate table\n+ totals + warnings| Actions
+    BaselineCostResult --> ReadinessReview
+
+    Actions -->|"Generate Preliminary SOW Outline"| SowOutline
+    SowOutline -->|reads| SowTemplates
+    EstimateRequest --> SowOutline
+    ResourcePlanResult -->|phases/roles/hours only| SowOutline
+    BaselineCostResult -.->|boolean status signal only,\nnever an amount| SowOutline
+    SowOutline -->|"Preliminary Draft" outline| Actions
+    Actions -->|displays| User
+
+    Wizard -.->|not built yet| CommercialPricing
+    BaselineCostResult -.->|feeds MVP.M4| CommercialPricing
+    CommercialPricing -.->|not built yet| SupportEstimation
+    SupportEstimation -.->|not built yet| FinalSow
     Wizard -.->|not built yet| AIAdapter
 
     classDef future stroke-dasharray: 5 5,opacity:0.6;
-    class FuturePlanning,AIAdapter,RatePreview future;
+    class CommercialPricing,SupportEstimation,FinalSow,AIAdapter future;

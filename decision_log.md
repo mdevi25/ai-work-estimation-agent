@@ -359,3 +359,103 @@ EAP.M1.UI2-D1.
 
 **Source:** EAP.M2, run from the live repository root, following
 approval of the pre-edit 10-point design report.
+
+## 2026-07-31 -- EAP.M2 browser review accepted
+
+**Decisions confirmed:**
+
+- EAP.M2 (Phase and Resource Planning) browser review is **accepted**.
+  Per the mandatory UI review gate, this clears the way for EAP.M3 --
+  Baseline Pricing to begin once explicitly requested; it does not
+  begin automatically (`CLAUDE.md` "Working protocol" item 13).
+- Deferred enhancements identified during review: minor resource-
+  planning UI and usability improvements. Confirmed non-blocking --
+  they do not affect the phase/resource-planning calculations or
+  workflow. Explicitly deferred to a dedicated UI-polish milestone
+  after the core MVP.M1-M6 workflow is complete, rather than addressed
+  ad hoc during MVP.M3+.
+
+**Source:** User acceptance message following the EAP.M2 browser-review
+handoff.
+
+## 2026-07-31 -- Baseline cost and rate card (EAP.M3)
+
+**Decisions confirmed:**
+
+- Added `data/rate_card.csv` (Role, Default Hourly Rate, Currency,
+  Active), with a distinct, non-uniform, illustrative/fictional rate
+  for every role MVP.M2's `resource_rules.json` can generate (verified
+  programmatically -- zero gaps), plus applicable variation roles.
+  Rates are demonstration values only, per `GUARDRAILS.md` section 3
+  and `PRICING-RULES.md` section 9; the file is read-only from the
+  application's perspective.
+- Added `src/pricing_engine.py`: `load_rate_card`, `build_baseline_cost`,
+  `reset_role_rate`, `reset_all_rates`, `reconcile_rate_state`. Formulas:
+  `role_cost = total_estimated_hours * scenario_rate`;
+  `baseline_delivery_cost = sum(role_cost)`;
+  `blended_hourly_rate = baseline_delivery_cost / total_estimated_hours`,
+  returned as `None` (never a fabricated `0.00`) when total hours are
+  zero (EAP.M3-D1 correction 1).
+- Single current-scenario rate model only: one configured default rate
+  and one session-only scenario rate per role, no Configured Baseline/
+  Working/Draft multi-scenario management -- narrower than the staged
+  `prompts/work-estimation/mvp-m3-baseline-pricing.md` prompt, per the
+  user's explicit EAP.M3 instructions (EAP.M3-D1 correction 9), flagged
+  and approved.
+- An override reason is required whenever the scenario rate differs
+  from the configured default (`validate_override_reason`); missing
+  reason blocks (`Calculation Blocked`). A role with no active
+  configured rate is always blocking -- never a fabricated rate
+  (EAP.M3-D1 correction 2, verified by
+  `test_rate_card_covers_every_role_m2_can_generate` and
+  `test_unknown_role_never_gets_a_fabricated_rate`).
+- Reset semantics: resetting one role clears both its scenario rate and
+  override reason together, restoring the configured default; "Reset
+  all" does the same for every active role; `reconcile_rate_state`
+  automatically drops stale rate/reason entries for roles no longer
+  present in the current resource plan (EAP.M3-D1 correction 3).
+- Pricing-readiness precedence is fixed: `Calculation Blocked` >
+  `Human Review Required` > `Ready for Baseline Review` -- blocking
+  reasons are checked first regardless of any Human Review condition
+  also being true, verified directly by
+  `test_blocked_takes_precedence_over_human_review_conditions`
+  (EAP.M3-D1 correction 4).
+- Delivery-risk warnings already present on the resource plan
+  (`ResourcePlanResult.warnings`) are surfaced as a Human Review trigger
+  but never rewritten, suppressed, or altered by the pricing engine --
+  verified the original warning text on the resource plan object is
+  unchanged after baseline-cost calculation (EAP.M3-D1 correction 5).
+- The exact required commercial-risk warning text is used verbatim
+  whenever a scenario rate is set below the configured default,
+  including the appended "Gross profit and margin will be calculated in
+  a later milestone" sentence (EAP.M3-D1 correction 8); no gross profit,
+  margin, markup, contingency, or customer price exists anywhere in
+  `pricing_engine.py` or its models.
+- `src/sow_outline_engine.py` gained one new optional boolean parameter,
+  `baseline_costing_in_progress`, which appends only the fixed sentence
+  "Baseline internal costing is under review." to the existing
+  "Document status" section -- never an amount, rate, or dollar figure.
+  The module structurally never imports `BaselineCostResult`,
+  `RoleCostRow`, or the rate card (EAP.M3-D1 correction 6); existing
+  calls/tests without the new parameter are unchanged (backward
+  compatible).
+- Removed `RoleRatePreviewRow`/`RoleRatePreviewSet` and the "Future
+  pricing interaction preview" illustrative scaffolding from
+  `src/models.py`/`app.py` (introduced in EAP.M1.UI1 as MVP.M3/M4
+  scaffolding), replacing them with the real `RateCardEntry`,
+  `RoleCostRow`, and `BaselineCostResult` models and a governed
+  "Baseline delivery cost" UI section.
+- UI: the Baseline Cost table shows total estimated hours and the
+  configured default rate as read-only; only the scenario rate and
+  override reason are editable; role cost and both difference fields
+  ($ and %) recalculate immediately from the edited values. No hours
+  are editable anywhere in this section -- MVP.M2's resource-plan hours
+  remain the sole, authoritative hours source (EAP.M3-D1 corrections 7
+  and 9).
+- No change to `src/phase_planner.py` or `src/resource_planner.py` (both
+  unchanged since MVP.M2). No multi-scenario management or commercial
+  approval workflow was introduced.
+
+**Source:** EAP.M3, run from the live repository root, following
+approval of the pre-edit 13-point Change-Impact Report and the ten
+corrections in EAP.M3-D1.

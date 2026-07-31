@@ -1,0 +1,26 @@
+Role,Default Hourly Rate,Currency,Active
+Business Analyst,115,USD,Yes
+Solution Architect,165,USD,Yes
+Senior Developer,145,USD,Yes
+Developer,115,USD,Yes
+QA,95,USD,Yes
+DevOps,125,USD,Yes
+AI Product Manager or Product Owner,155,USD,Yes
+AI or Solution Architect,175,USD,Yes
+Data Engineer,140,USD,Yes
+Prompt or Conversation Designer,130,USD,Yes
+QA or AI Evaluation Engineer,120,USD,Yes
+Responsible AI Reviewer,160,USD,Yes
+Security or Privacy Reviewer,150,USD,Yes
+AI Application Engineer,145,USD,Yes
+"DevOps, MLOps, or Platform Engineer",135,USD,Yes
+Support or Monitoring Engineer,100,USD,Yes
+ML Engineer,150,USD,Yes
+Product Owner,120,USD,Yes
+Project Manager,130,USD,Yes
+Technical Lead,150,USD,Yes
+Integration Engineer,125,USD,Yes
+Security Specialist,140,USD,Yes
+UX Designer,110,USD,Yes
+AI Engineer,145,USD,Yes
+Data Scientist,150,USD,Yes

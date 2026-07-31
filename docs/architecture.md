@@ -23,43 +23,49 @@ application directly.
 
 This document covers what is implemented through **MVP.M1 —
 Estimation foundation** (remediated by **EAP.M1.UI1** and
-**EAP.M1.UI2**) and **MVP.M2 — Phase and Resource Planning**: a guided,
-self-service 5-step Streamlit wizard (`app.py`) with a persistent
-left-side panel, that captures estimate intake, a suggested/
-correctable scope checklist, and complexity answers, feeding the three
-unchanged deterministic estimation engines (`src/complexity_engine.py`,
-`src/sizing_engine.py`, `src/contract_fit.py`) that compute weighted
-complexity, Relative Job Size / T-shirt size / sprint range, and
-contract-duration fit from governed JSON configuration under `data/`.
-It adds a differentiated action-navigation row on the results screen, a
-deterministic **preliminary SOW outline** generator
-(`src/sow_outline_engine.py` — explicitly not the governed MVP.M6 SOW
-capability), and now a deterministic **phase and resource planning**
-pair (`src/phase_planner.py`, `src/resource_planner.py`) that derives
-an editable phase/role/hours plan from the governed sizing result —
-with no rates, cost, or price anywhere. It establishes the separation
-of UI, engines, configuration, and data flow required by
-architecture-governance Gate 1.
+**EAP.M1.UI2**), **MVP.M2 — Phase and Resource Planning**, and
+**MVP.M3 — Baseline Cost and Role Rate Card**: a guided, self-service
+5-step Streamlit wizard (`app.py`) with a persistent left-side panel,
+that captures estimate intake, a suggested/correctable scope checklist,
+and complexity answers, feeding the three unchanged deterministic
+estimation engines (`src/complexity_engine.py`, `src/sizing_engine.py`,
+`src/contract_fit.py`) that compute weighted complexity, Relative Job
+Size / T-shirt size / sprint range, and contract-duration fit from
+governed JSON configuration under `data/`. It adds a differentiated
+action-navigation row on the results screen, a deterministic
+**preliminary SOW outline** generator (`src/sow_outline_engine.py` —
+explicitly not the governed MVP.M6 SOW capability), a deterministic
+**phase and resource planning** pair (`src/phase_planner.py`,
+`src/resource_planner.py`, unchanged since MVP.M2) that derives an
+editable phase/role/hours plan from the governed sizing result, and now
+a deterministic **baseline cost** engine (`src/pricing_engine.py`) that
+converts those role hours into baseline delivery cost using a
+configured rate card (`data/rate_card.csv`), with a session-only
+scenario-rate override per role and a pricing-readiness status — with
+no contingency, margin, markup, discount, or customer price anywhere.
+It establishes the separation of UI, engines, configuration, and data
+flow required by architecture-governance Gate 1.
 
 ## 4. Out-of-scope items
 
-No pricing, contingency, margin, support estimation, final/customer-
-approved SOW generation, or AI logic exists yet — all deferred to
-MVP.M3 through MVP.M7 and **not implemented in this repository**.
-Database, authentication, Docker, paid APIs, and Excel/PowerPoint
-export are out of scope for early milestones per `CLAUDE.md` and are
-not present here. The optional AI-capability intake field captured by
-the wizard (Step 2/4) drives an optional AI *workstream* in the phase/
-resource plan (MVP.M2) but still carries no cost, rate, or pricing
-logic anywhere — that remains MVP.M3/M4 scope regardless of AI
+No contingency, margin, commercial/customer pricing, support
+estimation, final/customer-approved SOW generation, or AI logic exists
+yet — all deferred to MVP.M4 through MVP.M7 and **not implemented in
+this repository**. Database, authentication, Docker, paid APIs, and
+Excel/PowerPoint export are out of scope for early milestones per
+`CLAUDE.md` and are not present here. The optional AI-capability intake
+field captured by the wizard (Step 2/4) drives an optional AI
+*workstream* in the phase/resource plan (MVP.M2) and now in baseline
+cost (MVP.M3), but still carries no commercial price, margin, or
+contingency anywhere — that remains MVP.M4 scope regardless of AI
 selection.
 
 ## 5. Current project stage
 
-**Prototype** (MVP.M1 complete). Complexity of this document matches
-that stage: MVP.M1's engines and wizard are documented in full below;
-MVP.M2 onward are named only where relevant to note what is
-deliberately deferred, not described as implemented.
+**Prototype** (MVP.M1-M3 complete). Complexity of this document
+matches that stage: MVP.M1-M3's engines and wizard are documented in
+full below; MVP.M4 onward are named only where relevant to note what
+is deliberately deferred, not described as implemented.
 
 ## 6. Functional requirements
 
@@ -100,43 +106,50 @@ a persistent sidebar, and calls into three deterministic engines under
 unchanged since MVP.M1), which read governed business rules from JSON
 configuration files under `data/` (no database). Shared structured
 models live in `src/models.py` (Pydantic), shared validation in
-`src/validators.py`, and shared JSON loading with controlled-error
+`src/validators.py`, and shared JSON/CSV loading with controlled-error
 handling in `src/config.py`. Three additional non-authoritative
 UI-support modules were added by EAP.M1.UI1: `src/scope_defaults.py`
 (scope-checklist defaults and scope-confirmation math),
 `src/assumption_engine.py` (deterministic, template-based assumption
 generation), and `src/running_estimate_preview.py` (the sidebar's
 "Preliminary" partial-complexity preview). None of these three touch
-or duplicate the authoritative engines' formulas. This shape was
-chosen over a spreadsheet-first or database-backed design because the
-project's explicit scope excludes a database and requires
-configurable-but-versioned business rules — CSV/JSON in source control
-gives that without added infrastructure cost. `pages/` remains empty;
-the wizard is implemented as one page with internal step-state rather
-than Streamlit's native multi-page routing, since a linear, stateful
-Back/Continue/Review flow with a persistent sidebar is materially
-simpler to guarantee that way than across independently-routed pages.
+or duplicate the authoritative engines' formulas. MVP.M2 added
+`src/phase_planner.py` and `src/resource_planner.py` (deterministic
+phase/resource-effort engines, no rates or cost). MVP.M3 added
+`src/pricing_engine.py` (deterministic baseline-cost engine reading
+`data/rate_card.csv`, a new CSV-configuration source alongside the
+existing JSON files). This shape was chosen over a spreadsheet-first or
+database-backed design because the project's explicit scope excludes a
+database and requires configurable-but-versioned business rules —
+CSV/JSON in source control gives that without added infrastructure
+cost. `pages/` remains empty; the wizard is implemented as one page
+with internal step-state rather than Streamlit's native multi-page
+routing, since a linear, stateful Back/Continue/Review flow with a
+persistent sidebar is materially simpler to guarantee that way than
+across independently-routed pages.
 
 ## 9. Component responsibilities
 
 - **`app.py`** — Streamlit UI only. Renders the 5-step wizard and
   persistent sidebar, calls the engines below with a structured
-  `EstimateRequest`, and displays their results, plus a separate,
-  clearly labeled illustrative-only future pricing preview section.
-  Contains no complexity, sizing, or contract-fit formulas itself.
+  `EstimateRequest`, and displays their results, including the
+  resource-plan and baseline-cost sections. Contains no complexity,
+  sizing, contract-fit, resource-planning, or pricing formulas itself.
 - **`src/models.py`** — structured Pydantic models only
   (`EstimateRequest`, `ComplexityDimensionAnswer`, `ComplexityResult`,
-  `SizingResult`, `ContractFitResult`, plus the additive, preview-only
-  `RoleRatePreviewRow`/`RoleRatePreviewSet` — see §19 for the boundary
-  on those two). No business calculations beyond the preview models'
-  own trivial, clearly-scoped arithmetic.
+  `SizingResult`, `ContractFitResult`, the MVP.M2 resource-planning
+  models, and the MVP.M3 pricing models `RateCardEntry`, `RoleCostRow`,
+  `BaselineCostResult`). No business calculations beyond trivial,
+  clearly-scoped field defaults.
 - **`src/validators.py`** — reusable validation (score ranges, weight
   totals, sizing-band schema and boundary coverage, contract-duration
   positivity, AI-field validity, scope-checklist schema, required-field
-  detection) shared by the engines and the UI.
-- **`src/config.py`** — generic JSON configuration loading. Raises a
-  controlled `ConfigurationError` on any missing or malformed file; no
-  engine falls back to a silently hard-coded value.
+  detection, rate-card schema, scenario-rate numeric/non-negative
+  validity, and override-reason requirement) shared by the engines and
+  the UI.
+- **`src/config.py`** — generic JSON and CSV configuration loading.
+  Raises a controlled `ConfigurationError` on any missing or malformed
+  file; no engine falls back to a silently hard-coded value.
 - **`src/complexity_engine.py`** — unchanged since MVP.M1. Loads and
   validates complexity weights and questions, computes the weighted
   complexity score at full precision plus its two-decimal display
@@ -173,11 +186,12 @@ simpler to guarantee that way than across independently-routed pages.
   Blocked` only at this milestone — see §19) and (2)
   `build_preliminary_sow_outline`, a deterministic, template-based
   21-section draft builder that reads only already-captured/validated
-  `EstimateRequest`/engine-result data. Never imports or reads
-  `RoleRatePreviewRow`/`RoleRatePreviewSet` or any illustrative pricing
-  data — structurally cannot leak pricing-preview values into the
-  outline. Not the governed `sow_generator.py` described in
-  `ENGINE-RESPONSIBILITIES.md` section 11 (MVP.M6).
+  `EstimateRequest`/engine-result data, plus one boolean-only signal
+  (`baseline_costing_in_progress`, MVP.M3) that appends a fixed
+  status-only sentence. Never imports `RateCardEntry`, `RoleCostRow`,
+  `BaselineCostResult`, or the rate card — structurally cannot leak
+  pricing values into the outline. Not the governed `sow_generator.py`
+  described in `ENGINE-RESPONSIBILITIES.md` section 11 (MVP.M6).
 - **`src/phase_planner.py`** — selects phases by work type and derives
   each phase's duration in sprints from the governed sizing result
   (`SizingResult.max_sprints`, weighted per `data/phase_rules.json`),
@@ -191,19 +205,33 @@ simpler to guarantee that way than across independently-routed pages.
   warnings (over-allocation, incompatible combinations, missing
   deployment/stabilization coverage, missing independent AI evaluation
   coverage). Does not apply rates or calculate cost or price.
-- **`data/`** — governed JSON configuration only: complexity weights,
-  the 7-dimension × 6-level answer scale, sizing bands, contract
-  terms, the original 7-value estimate-type catalog (internal
+- **`src/pricing_engine.py`** (MVP.M3) — loads and validates
+  `data/rate_card.csv` (`load_rate_card`); computes each role's cost
+  (`total_estimated_hours * scenario_rate`), baseline delivery cost
+  (sum of role costs), and the read-only blended hourly rate (`None`,
+  never a fabricated `0.00`, when total hours are zero)
+  (`build_baseline_cost`); manages session-only scenario-rate/
+  override-reason state (`reset_role_rate`, `reset_all_rates`,
+  `reconcile_rate_state`); and computes the pricing-readiness status
+  (`Calculation Blocked` > `Human Review Required` > `Ready for
+  Baseline Review`, in that precedence). No contingency, margin,
+  markup, discount, or customer price anywhere in this module — that is
+  MVP.M4 scope. The rate card is read-only from the application's
+  perspective; scenario overrides never write back to the CSV file.
+- **`data/`** — governed JSON/CSV configuration only: complexity
+  weights, the 7-dimension × 6-level answer scale, sizing bands,
+  contract terms, the original 7-value estimate-type catalog (internal
   compatibility), the 3-value work-type catalog, the scope-checklist
   catalog and defaults, assumption templates, the simplified AI-intake
   option catalog, phase rules (duration weights per work type plus the
   4 AI-workstream phases), resource rules (required roles/allocation
   per phase, `hours_per_sprint`, the AI-activity-to-phase/role
   mapping), role-combination rules (compatible and incompatible
-  combinations), the preliminary SOW outline's responsibility/
-  next-steps templates, and the original AI workstream activity
-  catalog (retained for the advanced/optional AI section). No customer
-  data, commercial data, real rates, or secrets.
+  combinations), the configured rate card (`rate_card.csv` —
+  illustrative/fictional demonstration rates only), the preliminary SOW
+  outline's responsibility/next-steps templates, and the original AI
+  workstream activity catalog (retained for the advanced/optional AI
+  section). No customer data, commercial data, real rates, or secrets.
 - **`tests/`** — one test module per engine/validator/helper plus
   `test_app_wizard.py` (Streamlit `AppTest`-driven UI, sidebar, and
   transparency checks) and the original bootstrap smoke test.
@@ -275,6 +303,25 @@ preliminary SOW outline (above) as additional preliminary planning
 information — phases, roles, and hours only, never rates or cost
 (`ResourcePlanResult` has no such fields to leak).
 
+**Baseline cost flow (MVP.M3):** once a `ResourcePlanResult` exists,
+`app.py` reconciles session-only scenario-rate/override-reason state
+against the plan's current role set
+(`pricing_engine.reconcile_rate_state`), then passes the plan, that
+state, the AI/staffing-model/unresolved-items signals to
+`pricing_engine.build_baseline_cost`, which loads
+`data/rate_card.csv` (`load_rate_card`) and returns a
+`BaselineCostResult` (per-role cost rows, baseline delivery cost,
+blended hourly rate, pricing-readiness status and reasons, commercial
+warnings) → `app.py` renders an editable table (`st.data_editor`,
+scenario rate and override reason only — hours and the configured
+default rate are read-only) where edits are read back into session
+state and immediately recalculated by re-running
+`build_baseline_cost`. Only a boolean (`baseline_cost_result is not
+None`) passes into the preliminary SOW outline flow, appending one
+fixed status sentence — never an amount, rate, or dollar figure
+(`sow_outline_engine.py` has no dependency on the pricing models to
+leak).
+
 No sensitive data, PII, or credentials are collected — inputs are
 structured selections, short business-objective text, and complexity
 answers only. Nothing is persisted beyond the browser session: no
@@ -329,6 +376,18 @@ or SOW content, so the distribution-approval review point defined in
 will be completed here when MVP.M6 introduces the governed, final SOW
 capability and a governed final duration/commercial position to
 support "Ready for AI Drafting."
+
+The baseline-cost section (MVP.M3) adds a third human review signal:
+`pricing_engine.build_baseline_cost`'s pricing-readiness status
+(`Ready for Baseline Review` / `Human Review Required` / `Calculation
+Blocked`) surfaces every condition that should stop a baseline cost
+from being treated as final — missing/invalid rates, override reasons,
+below-default commercial risk, AI workstream presence, Customer-defined
+staffing, carried-forward delivery-risk warnings, and unresolved scope
+items — governed by a fixed precedence (Blocked beats Human Review,
+which beats Ready) rather than any single condition silently winning.
+This is still not a commercial-approval workflow; no gross profit,
+margin, or customer price exists yet to approve (MVP.M4).
 
 A **mandatory UI review checkpoint** now also applies at the process
 level (not a code review point, a milestone-acceptance gate): every
@@ -410,20 +469,16 @@ working tree.
   MVP.M1's Change-Impact review, to give every score 0-5 a named,
   dimension-specific level rather than inferring intermediate levels
   from a 3-tier description.
-- **`RoleRatePreviewRow`/`RoleRatePreviewSet` are illustrative-only
-  scaffolding, never wired to `EstimateRequest` or any calculation:**
-  EAP.M1.UI1 asked for future role/hours/rate UI-ready model
-  boundaries without prematurely implementing MVP.M3/M4's governed
-  rate-card and pricing engines. The preview models mirror
-  `PRICING-RULES.md` §10-13's shape (configured default rate,
-  editable scenario rate, required override reason when they differ)
-  so MVP.M3/M4 can adopt the same shape rather than a divergent one,
-  but they are populated with hardcoded illustrative example data in
-  `app.py`, never a real `data/rate_card.csv` (deliberately not
-  created — that file is MVP.M3's configured baseline). The "Future
-  pricing interaction preview" section is a separate, clearly labeled,
-  collapsed UI area; it is never shown as part of the governed Step 5
-  result and never presented as a customer quote.
+- **`RoleRatePreviewRow`/`RoleRatePreviewSet` (EAP.M1.UI1's
+  illustrative-only scaffolding) were removed in MVP.M3, replaced by
+  the real, governed models:** those preview models mirrored
+  `PRICING-RULES.md` §10-13's shape but were populated with hardcoded
+  illustrative example data, never wired to `EstimateRequest` or a real
+  `data/rate_card.csv`. MVP.M3 needed the real shape (`RateCardEntry`,
+  `RoleCostRow`, `BaselineCostResult`) wired to the actual resource
+  plan and a real, governed rate card, so the placeholder models and
+  the "Future pricing interaction preview" UI section were deleted
+  rather than kept alongside the real implementation.
 - **Sidebar "Preliminary low/likely/high" reuses the unchanged
   `contract_fit.sprint_to_months` formula against three different
   sprint inputs (min/midpoint/max), rather than inventing a new
@@ -529,14 +584,45 @@ working tree.
   Known limitations) rather than a normalized two-table design, to
   satisfy the requirement for one combined, editable Phase/Duration/
   Role/Allocation/Person-sprints/Hours view.
+- **Single current-scenario rate model, not a multi-scenario Configured
+  Baseline/Working/Draft model:** the staged
+  `prompts/work-estimation/mvp-m3-baseline-pricing.md` prompt described
+  a fuller multi-scenario management model; the user's own explicit
+  EAP.M3 instructions scoped this milestone to one configured default
+  rate and one session-only scenario rate per role only. Followed the
+  narrower, explicit instruction and flagged the divergence from the
+  staged prompt rather than silently picking either interpretation.
+- **Blended hourly rate is `None`, never a fabricated `0.00`, when
+  total estimated hours are zero:** a real `0.00` would misrepresent
+  "no hours yet" as "a calculated zero-cost rate." The UI renders "Not
+  available — total estimated hours are zero" instead, per explicit
+  correction during MVP.M3's Change-Impact review.
+- **An unmapped or inactive role in the rate card always blocks rather
+  than defaulting to a fallback rate:** fabricating a rate for a role
+  with no configured entry would silently misstate cost. Verified the
+  rate card has zero gaps against every role MVP.M2's `resource_rules.json`
+  can generate (`test_rate_card_covers_every_role_m2_can_generate`), so
+  this path should only trigger for a genuinely new/renamed role
+  introduced later without an updated rate card.
+- **Readiness precedence is fixed (Blocked > Human Review > Ready)
+  rather than a first-match-wins or severity-summed model:** a
+  correction during MVP.M3's Change-Impact review required blocking
+  conditions to always win regardless of how many Human Review
+  conditions are also present, verified directly by
+  `test_blocked_takes_precedence_over_human_review_conditions`.
 
 ## 20. Known limitations
 
-- No pricing, support, final/customer-approved SOW, or AI logic exists
-  — this document describes MVP.M1 and MVP.M2 only, per the
-  milestone-discipline rule in `CLAUDE.md`. The preliminary SOW outline
-  (EAP.M1.UI2) is explicitly a draft-only, always-human-review-required
-  artifact, not the governed MVP.M6 capability.
+- No contingency, margin, commercial/customer pricing, support, final/
+  customer-approved SOW, or AI logic exists — this document describes
+  MVP.M1 through MVP.M3 only, per the milestone-discipline rule in
+  `CLAUDE.md`. The preliminary SOW outline (EAP.M1.UI2) is explicitly a
+  draft-only, always-human-review-required artifact, not the governed
+  MVP.M6 capability.
+- `data/rate_card.csv`'s rates are fictional/illustrative demonstration
+  values authored for this prototype, not real commercial rates — per
+  `GUARDRAILS.md` §3 and `PRICING-RULES.md` §9, flagged for business
+  review before any real commercial use.
 - The resource-plan editor lets duration be edited per row rather than
   once per phase (see §19) — editing one role's row for a phase does
   not propagate to other roles in that same phase automatically.
@@ -559,30 +645,29 @@ working tree.
   pre-seeding `session_state` and rendering directly to the target
   step rather than clicking through every prior selection widget; this
   is a test-authoring workaround, not an application defect.
-- `st.data_editor` (used by the future pricing preview) has no
-  `AppTest` interaction wrapper in this Streamlit version, so that
-  section's live edit/recalculation behavior is verified by manual
-  browser review rather than an automated UI-driven test; its initial
-  render and static content are automated-tested.
+- `st.data_editor` (used by the resource-plan and baseline-cost tables)
+  has no `AppTest` interaction wrapper in this Streamlit version, so
+  those sections' live edit/recalculation behavior is verified by
+  manual browser review rather than an automated UI-driven test; their
+  initial render and static content are automated-tested.
 - No CI/CD pipeline exists; validation is manual (`pytest`, `streamlit
   run`) at this stage.
 
 ## 21. Future considerations
 
-- MVP.M3–M5 introduce baseline pricing, commercial pricing, and support
-  estimation. `ResourcePlanResult`'s `estimated_hours` per role/phase
-  (MVP.M2) is designed to feed `pricing_engine.py`'s `role_cost`
-  formula directly (`PRICING-RULES.md` §2). `RoleRatePreviewRow`/
-  `RoleRatePreviewSet` (§19) offer a UI-ready shape MVP.M3/M4 may adopt
-  for the real, governed `pricing_engine.py` and `data/rate_card.csv`,
-  but none of that real logic, nor any pricing-adjacent data model
-  wired to `EstimateRequest` or `ResourcePlanResult`, exists in this
-  repository yet.
-- MVP.M2's phase/resource plan is currently regenerated fresh each time
-  and not itself part of `EstimateRequest` — MVP.M3 will need to decide
-  whether the resource plan becomes a persisted-in-session, human-
-  approved input (mirroring `PRICING-RULES.md` §11's scenario model)
-  rather than a recomputed-on-click view.
+- MVP.M4 introduces commercial pricing: contingency, target margin,
+  gross profit, discounts/adjustments, and the proposed customer price,
+  built on top of MVP.M3's `BaselineCostResult.baseline_delivery_cost`.
+  MVP.M5 introduces support estimation (warranty, maintenance,
+  enhancement support). Neither exists in this repository yet.
+- MVP.M3's baseline cost (like MVP.M2's resource plan before it) is
+  currently regenerated fresh each render and not itself part of
+  `EstimateRequest` — MVP.M4 will need to decide whether the baseline
+  cost becomes a persisted-in-session, human-approved input (mirroring
+  `PRICING-RULES.md` §11's scenario model) rather than a recomputed-on-
+  render view, and whether a real multi-scenario (Configured Baseline/
+  Working/Draft) model belongs there instead of MVP.M3's single
+  current-scenario simplification (see §19).
 - MVP.M6 introduces the governed, final SOW capability
   (`sow_generator.py`) and customer-facing output, and will require
   revisiting §9's internal/customer-view separation, since this
