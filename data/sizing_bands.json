@@ -1,0 +1,72 @@
+[
+  {
+    "relative_job_size": 1,
+    "tshirt_size": "XS",
+    "min_score": 0.00,
+    "max_score": 0.75,
+    "min_sprints": 0.5,
+    "max_sprints": 1,
+    "discovery_review_required": false,
+    "decomposition_required": false
+  },
+  {
+    "relative_job_size": 2,
+    "tshirt_size": "S",
+    "min_score": 0.76,
+    "max_score": 1.50,
+    "min_sprints": 1,
+    "max_sprints": 1.5,
+    "discovery_review_required": false,
+    "decomposition_required": false
+  },
+  {
+    "relative_job_size": 3,
+    "tshirt_size": "S",
+    "min_score": 1.51,
+    "max_score": 2.00,
+    "min_sprints": 1,
+    "max_sprints": 2,
+    "discovery_review_required": false,
+    "decomposition_required": false
+  },
+  {
+    "relative_job_size": 5,
+    "tshirt_size": "M",
+    "min_score": 2.01,
+    "max_score": 3.00,
+    "min_sprints": 2,
+    "max_sprints": 4,
+    "discovery_review_required": false,
+    "decomposition_required": false
+  },
+  {
+    "relative_job_size": 8,
+    "tshirt_size": "L",
+    "min_score": 3.01,
+    "max_score": 4.00,
+    "min_sprints": 4,
+    "max_sprints": 6,
+    "discovery_review_required": false,
+    "decomposition_required": false
+  },
+  {
+    "relative_job_size": 13,
+    "tshirt_size": "XL",
+    "min_score": 4.01,
+    "max_score": 4.60,
+    "min_sprints": 6,
+    "max_sprints": 10,
+    "discovery_review_required": true,
+    "decomposition_required": false
+  },
+  {
+    "relative_job_size": 20,
+    "tshirt_size": "Epic",
+    "min_score": 4.61,
+    "max_score": 5.00,
+    "min_sprints": 10,
+    "max_sprints": 16,
+    "discovery_review_required": false,
+    "decomposition_required": true
+  }
+]

@@ -1,0 +1,306 @@
+{
+  "notice": "This 0-5 answer scale is the product's approved estimation convention. It is not a universal industry standard.",
+  "dimensions": [
+    {
+      "key": "functional",
+      "display_name": "Functional complexity",
+      "question": "How much business functionality is being built or changed?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No business functionality is being added or changed in this work.",
+          "example": "A purely technical or infrastructure change with no visible difference to how the business operates."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "A very small, self-contained adjustment to one existing function, with no branching logic.",
+          "example": "Changing a default value, label, or a single existing field."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "A single, well-understood function or rule is being added or changed.",
+          "example": "Adding one new validation rule to an existing screen or form."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "Several related functions are affected, or a moderately branched workflow is involved.",
+          "example": "Adding a new approval step that touches a handful of connected screens."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "Many interacting functions, complex business rules, or extensive conditional logic are involved.",
+          "example": "Reworking a multi-step order-processing workflow with several interdependent business rules."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "An enterprise-wide functional change spanning multiple business processes or a full workflow redesign.",
+          "example": "Redesigning the end-to-end quote-to-cash process across several departments."
+        }
+      ]
+    },
+    {
+      "key": "technical",
+      "display_name": "Technical complexity",
+      "question": "How difficult is the underlying technical implementation, independent of the business logic?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No new technical implementation is required beyond existing, unchanged code.",
+          "example": "A documentation-only or configuration-label change with no code path affected."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "Uses a pattern the team has implemented many times before, with no new tools or approach.",
+          "example": "Adding a field to a form using the exact same pattern used elsewhere in the app."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "Uses established, well-understood patterns and technology already in active use on this project.",
+          "example": "Reusing an existing internal service to add a similar, familiar capability."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "Involves a moderately unfamiliar technical approach or a technology the team has used only occasionally.",
+          "example": "Integrating a library or service the team has touched once or twice before."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "Involves unproven technology for this team or a significant architectural change.",
+          "example": "Introducing a new communication pattern, such as asynchronous messaging, not previously used in this system."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "Requires advanced, unproven technical problem-solving with no established precedent on this project.",
+          "example": "Building a novel technical capability with no comparable prior implementation to draw from."
+        }
+      ]
+    },
+    {
+      "key": "integration",
+      "display_name": "Integration complexity",
+      "question": "How much does this work depend on connecting to other systems?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No external system integration is involved at all.",
+          "example": "A change fully contained within one application with no outside calls."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "A single integration that is already fully proven and documented, used the same way as before.",
+          "example": "Reusing an existing, stable integration with no new configuration."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "One well-documented integration with a clear, known interface.",
+          "example": "Calling one existing, well-documented internal API."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "A small number of integrations with known interfaces.",
+          "example": "Connecting to two or three systems whose interfaces are already documented and understood."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "Many integrations, or integrations with poorly documented interfaces.",
+          "example": "Coordinating data exchange with several systems, some with incomplete documentation."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "Many integrations with systems outside the team's control, or interfaces that are largely undocumented.",
+          "example": "Integrating with multiple third-party or vendor systems whose behavior is not fully known in advance."
+        }
+      ]
+    },
+    {
+      "key": "data",
+      "display_name": "Data complexity",
+      "question": "How much data modeling, transformation, or migration is involved?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No data model or data content changes are involved.",
+          "example": "A change that reads existing data without altering its structure or content."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "A trivial, well-understood data change with no migration required.",
+          "example": "Adding a single optional field to an existing record with a safe default."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "A small, well-understood schema change or a small, bounded data migration.",
+          "example": "Adding a new column and backfilling it from an existing field."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "A moderate schema change or a bounded data migration affecting more than one table or entity.",
+          "example": "Restructuring a few related tables and migrating existing records into the new structure."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "A large-scale migration or a complex transformation across multiple systems or data stores.",
+          "example": "Migrating a significant volume of historical data between two differently structured systems."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "Large-scale migration combined with data-quality remediation or complex, multi-source transformation.",
+          "example": "Consolidating and cleaning data from several legacy sources into a single new data model."
+        }
+      ]
+    },
+    {
+      "key": "testing",
+      "display_name": "Testing complexity",
+      "question": "How much test effort and coordination does this work require?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No new testing is required beyond what already exists and is unaffected.",
+          "example": "A change with no functional or technical impact to verify."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "Straightforward test cases with essentially no regression surface.",
+          "example": "Verifying a single new field behaves as expected in isolation."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "Straightforward test cases with a small, well-understood regression surface.",
+          "example": "Testing one new function plus its immediate, well-known neighbors."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "A moderate regression surface, or some coordination across teams or components is needed.",
+          "example": "Testing a change that touches a few screens maintained by more than one team."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "An extensive regression surface, complex test-data needs, or coordination across multiple systems.",
+          "example": "Full regression testing across a multi-step workflow with several dependent systems."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "Extensive regression surface combined with complex test-data preparation and cross-system, cross-team coordination.",
+          "example": "End-to-end testing across several integrated systems with specially prepared test data and multiple test teams involved."
+        }
+      ]
+    },
+    {
+      "key": "dependency",
+      "display_name": "Dependency complexity",
+      "question": "How much does this work depend on other teams, vendors, or unresolved decisions?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No dependency on other teams, vendors, or pending decisions exists.",
+          "example": "Work that a single team can fully complete on its own."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "A dependency exists but is minor and nearly resolved, needing little active coordination.",
+          "example": "Waiting on a small configuration value from another team that has already committed to a delivery date."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "One or two known, manageable dependencies on other teams or vendors.",
+          "example": "Needing a small API change from another internal team before this work can complete."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "Several known dependencies that require active coordination and tracking.",
+          "example": "Coordinating delivery timing across two or three teams or vendors with different schedules."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "Multiple dependencies outside the team's control, or dependencies on decisions that are not yet finalized.",
+          "example": "Work that cannot fully proceed until a vendor contract and an internal architecture decision are both settled."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "Numerous dependencies outside the team's control combined with materially unresolved decisions.",
+          "example": "Delivery depends on several external vendors and on a business decision that has not yet been made."
+        }
+      ]
+    },
+    {
+      "key": "operational_risk",
+      "display_name": "Operational risk",
+      "question": "How much risk does this work introduce to production stability, security, or compliance?",
+      "levels": [
+        {
+          "score": 0,
+          "label": "None or Not Applicable",
+          "description": "No production impact, sensitive data, or compliance exposure is involved.",
+          "example": "Work performed entirely outside any production system."
+        },
+        {
+          "score": 1,
+          "label": "Very Low",
+          "description": "Minimal, low-likelihood production impact with no sensitive data or compliance exposure.",
+          "example": "A change isolated to a non-critical, low-traffic internal tool."
+        },
+        {
+          "score": 2,
+          "label": "Low",
+          "description": "Minimal production impact in a component that is used but not on the critical path, with no sensitive data or compliance exposure.",
+          "example": "A small change to a reporting feature that does not affect core transactions."
+        },
+        {
+          "score": 3,
+          "label": "Moderate",
+          "description": "Some production impact, or moderate handling of sensitive data.",
+          "example": "A change to a customer-facing feature that handles personal contact information."
+        },
+        {
+          "score": 4,
+          "label": "High",
+          "description": "Significant production impact, sensitive-data exposure, or a compliance-relevant change.",
+          "example": "A change to payment processing or a system that stores regulated personal data."
+        },
+        {
+          "score": 5,
+          "label": "Very High",
+          "description": "Major production impact combined with sensitive-data exposure or direct compliance or regulatory relevance.",
+          "example": "A change to core financial transaction processing that is subject to regulatory audit."
+        }
+      ]
+    }
+  ]
+}

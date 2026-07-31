@@ -1,0 +1,9 @@
+{
+  "functional": 0.20,
+  "technical": 0.20,
+  "integration": 0.15,
+  "data": 0.10,
+  "testing": 0.15,
+  "dependency": 0.10,
+  "operational_risk": 0.10
+}

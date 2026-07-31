@@ -1,0 +1,20 @@
+[
+  {
+    "key": "new_project",
+    "label": "New Project",
+    "description": "Build a new application, platform, workflow, integration, or capability.",
+    "internal_estimate_type": "new_project"
+  },
+  {
+    "key": "enhancement",
+    "label": "Enhancement",
+    "description": "Modify or extend an existing application, workflow, integration, report, or capability.",
+    "internal_estimate_type": "enhancement"
+  },
+  {
+    "key": "production_support",
+    "label": "Production Support",
+    "description": "Investigate, correct, stabilize, maintain, or support an existing production service.",
+    "internal_estimate_type": "production_support"
+  }
+]

@@ -1,32 +1,78 @@
 ---
-title: AI Work Estimation and Pricing Assistant -- Bootstrap Skeleton (Current State)
+title: AI Work Estimation and Pricing Assistant -- MVP.M1 + EAP.M1.UI1 (Current State)
 ---
 flowchart TD
-    User["Internal user\n(estimation staff)"]
+    User["Nontechnical business user"]
 
-    subgraph UI["UI layer -- app.py / pages/ (Streamlit)"]
-        Placeholder["Placeholder page\n(title + description only)"]
+    subgraph UI["UI layer -- app.py (Streamlit, single-page wizard + persistent sidebar)"]
+        Wizard["5-step wizard\n(work type, quick facts, scope checklist,\ncomplexity and AI, review and estimate)"]
+        Sidebar["Persistent sidebar\n(step status, current estimate,\nrunning estimate, warnings)"]
     end
 
-    subgraph Engines["Engine layer -- src/ (empty, no logic yet)"]
-        FutureEngine["Deterministic engines\n(planned: MVP.M1+)"]
+    subgraph Helpers["Non-authoritative UI-support helpers -- src/"]
+        ScopeDefaults["scope_defaults.py\nscope defaults + confirmation %"]
+        AssumptionEngine["assumption_engine.py\ntemplate-based assumptions"]
+        RunningPreview["running_estimate_preview.py\n\"Preliminary\" partial-complexity view"]
     end
 
-    subgraph Config["Configuration -- data/ (empty, no rules yet)"]
-        FutureConfig["CSV / JSON business rules\n(planned: MVP.M1+)"]
+    subgraph Models["src/models.py"]
+        EstimateRequest["EstimateRequest\n(assembled at Review step)"]
     end
 
-    subgraph FutureAI["AI adapter (not present -- deferred to MVP.M7)"]
-        AIAdapter["Replaceable AI provider interface\n(NOT YET IMPLEMENTED)"]
+    subgraph Engines["Authoritative engine layer -- src/ (unchanged since MVP.M1)"]
+        ComplexityEngine["complexity_engine.py\nweighted score + contributions"]
+        SizingEngine["sizing_engine.py\nRJS / T-shirt / sprint range"]
+        ContractFit["contract_fit.py\ncontract-fit status"]
     end
 
-    HumanReview["Human review point\n(required before any\ncustomer-facing output)"]
+    subgraph Config["Configuration -- data/ (governed JSON)"]
+        Weights["complexity_weights.json"]
+        Questions["complexity_questions.json"]
+        Bands["sizing_bands.json"]
+        Terms["contract_terms.json"]
+        ScopeConfig["scope_checklist_items.json"]
+        AssumptionConfig["assumption_templates.json"]
+    end
 
-    User -->|views| Placeholder
-    Placeholder -.->|planned data flow, MVP.M1+| FutureEngine
-    FutureEngine -.->|reads| FutureConfig
-    FutureEngine -.->|planned output| HumanReview
-    HumanReview -.->|approved values only| AIAdapter
+    HumanReview["Human review point\n(Review step -- Step 5,\nrequired before calculation runs)"]
+
+    subgraph PricingPreview["Future pricing interaction preview -- illustrative only, not authoritative"]
+        RatePreview["RoleRatePreviewRow / RoleRatePreviewSet\nhardcoded example data, never wired\nto EstimateRequest or any calculation"]
+    end
+
+    subgraph FutureScope["Not implemented -- deferred"]
+        FuturePlanning["Governed phase/resource planning,\npricing, support, SOW\n(MVP.M2-M6)"]
+        AIAdapter["Estimator's own AI-assisted intake\n(MVP.M7, replaceable interface)"]
+    end
+
+    User -->|answers wizard steps 1-4| Wizard
+    Wizard <-->|reads defaults, writes corrections| ScopeDefaults
+    ScopeDefaults -->|reads| ScopeConfig
+    Wizard -->|answered-so-far scores| RunningPreview
+    RunningPreview -->|reuses, does not modify| SizingEngine
+    RunningPreview -->|"Preliminary" size/duration| Sidebar
+    ScopeDefaults -->|scope-confirmation %| Sidebar
+
+    Wizard -->|confirms inputs| HumanReview
+    HumanReview -->|selections + unknown items| AssumptionEngine
+    AssumptionEngine -->|reads| AssumptionConfig
+    AssumptionEngine -->|editable assumptions| Wizard
+    HumanReview -->|assembles| EstimateRequest
+    EstimateRequest --> ComplexityEngine
+    ComplexityEngine -->|reads| Weights
+    ComplexityEngine -->|reads| Questions
+    ComplexityEngine -->|unrounded score| SizingEngine
+    SizingEngine -->|reads| Bands
+    SizingEngine -->|max sprint estimate| ContractFit
+    ContractFit -->|reads| Terms
+    ContractFit -->|governed results| Sidebar
+    ContractFit -->|governed results| Wizard
+    Wizard -->|displays| User
+
+    Wizard -.->|separate, clearly labeled section| RatePreview
+
+    Wizard -.->|not built yet| FuturePlanning
+    Wizard -.->|not built yet| AIAdapter
 
     classDef future stroke-dasharray: 5 5,opacity:0.6;
-    class FutureEngine,FutureConfig,AIAdapter,HumanReview future;
+    class FuturePlanning,AIAdapter,RatePreview future;

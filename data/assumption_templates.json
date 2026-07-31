@@ -1,0 +1,57 @@
+{
+  "by_work_type": {
+    "new_project": [
+      "Target architecture and technology choices are approved before development begins.",
+      "Customer stakeholders provide timely decisions and approvals.",
+      "Customer-provided test data or environments are available when needed.",
+      "Deployment access and release approval are provided.",
+      "Unknown or unresolved scope may require estimate revision.",
+      "Out-of-scope work requires change review.",
+      "Third-party licensing and usage fees are excluded unless listed."
+    ],
+    "enhancement": [
+      "Existing source code and environments are accessible.",
+      "Existing production behavior remains stable before work begins.",
+      "Existing interfaces remain materially unchanged unless identified in scope.",
+      "Regression testing covers impacted workflows.",
+      "Customer stakeholders provide timely decisions.",
+      "Customer-provided test data is available.",
+      "Deployment access and release approval are provided.",
+      "Unknown scope may require estimate revision.",
+      "Unrelated production defects are excluded.",
+      "Third-party licensing and usage fees are excluded unless listed.",
+      "Out-of-scope work requires change review."
+    ],
+    "production_support": [
+      "Initial scope may cover investigation and root-cause analysis.",
+      "Remediation may require a separate estimate.",
+      "Logs, monitoring data, access, and incident details will be provided.",
+      "Resolution depends on reproducibility and third-party dependencies.",
+      "Unrelated enhancements are excluded."
+    ]
+  },
+  "ai_enabled": [
+    "Approved data sources are available and permitted for use.",
+    "AI output receives the selected level of human review.",
+    "Model-provider charges are excluded unless explicitly included.",
+    "Evaluation thresholds must be agreed before production approval.",
+    "Material model, provider, or grounding changes may require reevaluation."
+  ],
+  "human_review_templates": {
+    "Always": "AI output will always be reviewed by a person before use.",
+    "Sometimes": "AI output will be reviewed by a person for higher-risk cases; routine output may not be reviewed individually.",
+    "No": "AI output will not be routinely reviewed by a person before use -- this should be revisited if risk increases.",
+    "Not yet decided": "The level of human review for AI output has not yet been decided and should be confirmed before production use."
+  },
+  "unknown_scope_item_template": "The status of \"{item}\" is not yet known and may require estimate revision once confirmed.",
+  "systems_involved_template": "Work involving {system} assumes necessary access, credentials, and documentation will be made available.",
+  "excluded_scope_item_template": "\"{item}\" is treated as excluded from this scope; if needed later, it will require a separate estimate.",
+  "system_context_templates": {
+    "New system": "This is treated as new development; no existing system constraints apply unless separately identified.",
+    "Existing system": "Existing system behavior and interfaces are assumed stable unless a change is identified in scope.",
+    "Not yet known": "System context (new vs. existing) is not yet confirmed and may affect scope once known."
+  },
+  "ai_data_template": "AI is expected to use {data_type}; access to and permitted use of this data must be confirmed before work begins.",
+  "contract_term_template": "The requested delivery term of {term} is a planning and commercial boundary only and does not guarantee a final schedule.",
+  "dependency_provided_template": "The following known dependency must be resolved before or during delivery: {dependency}."
+}

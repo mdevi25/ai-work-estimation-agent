@@ -1,0 +1,37 @@
+[
+  {
+    "key": "new_project",
+    "label": "New Project",
+    "help_text": "Deliver a new solution, capability, or system that does not currently exist for the customer."
+  },
+  {
+    "key": "enhancement",
+    "label": "Enhancement",
+    "help_text": "Modify an existing solution to change, extend, or correct its behavior."
+  },
+  {
+    "key": "production_support",
+    "label": "Production Support",
+    "help_text": "Address defects or issues in a live production system."
+  },
+  {
+    "key": "maintenance_support",
+    "label": "Maintenance Support",
+    "help_text": "Sustain existing functionality without materially expanding it."
+  },
+  {
+    "key": "enhancement_support",
+    "label": "Enhancement Support",
+    "help_text": "Reserve ongoing capacity for future improvements to an existing solution."
+  },
+  {
+    "key": "implementation_plus_support",
+    "label": "Implementation plus Support",
+    "help_text": "Combine a delivery engagement with attached post-delivery support commitments."
+  },
+  {
+    "key": "discovery_or_assessment",
+    "label": "Discovery or Assessment",
+    "help_text": "Reduce uncertainty before a responsible full commitment can be made."
+  }
+]

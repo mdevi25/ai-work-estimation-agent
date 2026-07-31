@@ -1,0 +1,26 @@
+{
+  "help_options": [
+    "Summarize or classify information",
+    "Search or retrieve information",
+    "Generate content",
+    "Recommend an action",
+    "Automate a workflow",
+    "Predict an outcome",
+    "Analyze documents or data",
+    "Other",
+    "Not yet known"
+  ],
+  "data_options": [
+    "Public information",
+    "Internal business information",
+    "Customer information",
+    "Sensitive or regulated information",
+    "Not yet known"
+  ],
+  "human_review_options": [
+    "Always",
+    "Sometimes",
+    "No",
+    "Not yet decided"
+  ]
+}

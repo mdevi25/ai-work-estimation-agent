@@ -67,3 +67,231 @@ AI-PPM root.
 
 **Source:** EAP.BOOTSTRAP, run from the live repository root, following
 approval of the pre-edit plan presented in that session.
+
+## 2026-07-31 -- MVP.M1: Estimation foundation (EAP.M1)
+
+**Decisions confirmed:**
+
+- Implemented the estimation foundation as an 8-step guided Streamlit
+  wizard (`app.py`): estimate type, business request, scope and
+  systems, complexity questions, optional AI capability, contract
+  term, review, results.
+- New governed configuration files added under `data/`:
+  `complexity_weights.json`, `complexity_questions.json`,
+  `sizing_bands.json`, `contract_terms.json`, `estimate_types.json`,
+  `ai_workstream_activities.json`.
+- New `src/` modules: `config.py` (JSON loading with controlled
+  `ConfigurationError`, no silent fallback), `models.py`
+  (`EstimateRequest`, `ComplexityDimensionAnswer`, `ComplexityResult`,
+  `SizingResult`, `ContractFitResult`), `validators.py`,
+  `complexity_engine.py`, `sizing_engine.py`, `contract_fit.py`.
+- Engine ownership: `complexity_engine.py` owns the weighted-score
+  calculation and explanatory contribution data only;
+  `sizing_engine.py` owns all Relative Job Size, T-shirt size, sprint
+  range, and size-13/size-20 warning mapping. No sizing-band mapping
+  is duplicated in `complexity_engine.py` (EAP.M1-D1 correction 3).
+- Complexity answer scale: every dimension uses the explicit six-level
+  scale 0 = None or Not Applicable, 1 = Very Low, 2 = Low, 3 =
+  Moderate, 4 = High, 5 = Very High, each with a dimension-specific
+  description and example authored for this milestone (not verbatim
+  from `COMPLEXITY-AND-SIZING.md`, which only defines 3-tier
+  descriptions) -- flagged as a configurable prototype assumption
+  requiring business review (EAP.M1-D1 correction 1).
+- "Major complexity driver" was rejected as a new business-rule term;
+  the transparency view instead labels dimensions scoring 4 or 5 as
+  "Higher-scoring complexity dimensions" -- explanatory only, no
+  warning, threshold, status, or pricing rule is derived from it, and
+  dimensions scoring below 4 remain visible in the full calculation
+  detail (EAP.M1-D1 correction 2).
+- All six `data/` configuration files are validated at load time
+  (schema, weight totals, sizing-band boundary coverage with no gaps
+  or overlaps, positive contract durations); any missing, malformed,
+  or invalid configuration raises a controlled `ConfigurationError`
+  rather than falling back to a hard-coded value (EAP.M1-D1
+  correction 4).
+- `docs/architecture.md` sections 3, 4, 6-10, 13, and 19-21 updated to
+  document the implemented MVP.M1 design only; MVP.M2-M7 remain
+  explicitly marked as not implemented (EAP.M1-D1 correction 5).
+  `docs/architecture-diagram.mmd` updated to match.
+- Fixed a real defect found during implementation: binding a Streamlit
+  widget's `key=` directly to a canonical session-state field name
+  caused Streamlit to silently delete that field's value whenever the
+  wizard navigated to a step that didn't render that widget (a
+  documented Streamlit behavior, not particular to this app). Every
+  wizard field now uses a separate widget-only key
+  (`synced_text_input`/`synced_text_area` helpers, or an explicit
+  `index=`/`value=` computed from canonical state), with the canonical
+  value stored and read independently -- this is what makes
+  Back/Continue value persistence actually work.
+- No estimation-adjacent milestone (phase planning, resource planning,
+  pricing, contingency, margin, support estimation, customer summary,
+  SOW generation, Excel/PowerPoint export, or AI-assisted intake) was
+  introduced. The optional AI-capability field captures customer-
+  project intake only; no AI phase, role, effort, cost, or pricing
+  logic exists anywhere in this milestone.
+
+**Source:** EAP.M1, run from the live repository root, following
+approval of the pre-edit Change-Impact Report and the corrections in
+EAP.M1-D1.
+
+## 2026-07-31 -- MVP.M1 UI/UX remediation: self-service redesign (EAP.M1.UI1)
+
+**Decisions confirmed:**
+
+- Redesigned MVP.M1's UI from an 8-step technical wizard into a
+  5-step self-service wizard (work type, quick facts, scope checklist,
+  complexity and AI, review and estimate) with a persistent left-side
+  panel (step status, current estimate, running estimate, warning
+  status), targeting a 5-10 minute completion time for a nontechnical
+  business user.
+- The approved deterministic estimation engine is unchanged:
+  `src/complexity_engine.py`, `src/sizing_engine.py`, and
+  `src/contract_fit.py` were not modified. Complexity weights, the
+  weighted-complexity formula, Relative Job Size mapping, T-shirt
+  mapping, sprint ranges, the duration formula, and contract-fit
+  thresholds are byte-for-byte unchanged, verified by the unmodified
+  regression test suite continuing to pass in full.
+- Work type is simplified to three UI-facing options (New Project,
+  Enhancement, Production Support), stored directly in the existing
+  internal `estimate_type` field for compatibility with the original
+  7-value taxonomy. Changing work type after scope answers exist
+  requires explicit user confirmation before resetting scope defaults.
+- Added a non-authoritative "Preliminary" sidebar preview
+  (`src/running_estimate_preview.py`) shown before all seven complexity
+  dimensions are answered: weights are re-normalized among only the
+  answered dimensions, unanswered dimensions are never treated as
+  zero, and the preview always states how many of seven are answered.
+  The final Step 5 result uses only the unchanged, authoritative
+  `complexity_engine.calculate_weighted_complexity` with all seven
+  validated answers (EAP.M1.UI1-D1 correction 2).
+- No UI prototype file was available in the repository or this
+  conversation; the redesign proceeded from the written prototype-
+  requirements description only, per explicit instruction not to claim
+  pixel-for-pixel equivalence and not to create or copy a prototype
+  reference file into the repository (EAP.M1.UI1-D1 correction 1).
+- Added `RoleRatePreviewRow`/`RoleRatePreviewSet` to `src/models.py` as
+  additive, illustrative-only UI scaffolding for a future MVP.M3/M4
+  pricing interaction (role, actual hours, configured default rate,
+  scenario rate, required override reason when rates differ, computed
+  cost, read-only blended rate). Mirrors the shape already governed by
+  `PRICING-RULES.md` sections 10-13 so a later milestone can adopt it
+  rather than diverge, but it is never wired to `EstimateRequest`, any
+  engine, or any customer-facing output. No `data/rate_card.csv` was
+  created; the "Future pricing interaction preview" section in `app.py`
+  uses hardcoded illustrative example data only, clearly labeled and
+  never presented as a customer quote (EAP.M1.UI1-D1 corrections 3 and
+  5).
+- Commercial-risk warnings appear only inside that illustrative pricing
+  preview section, computed from its own example numbers; the main
+  persistent sidebar never shows a commercial warning, since no
+  governed rate, cost, or margin data exists yet. Delivery-risk
+  warnings are demonstrated from scope-definition signals only
+  (unresolved/unknown scope checklist items) — the hours/staffing-based
+  trigger described in the milestone prompt is deferred until MVP.M2
+  introduces a resource plan to evaluate (EAP.M1.UI1-D1 correction 4).
+- Added `src/scope_defaults.py` (scope-checklist defaults and
+  scope-confirmation percentage) and `src/assumption_engine.py`
+  (deterministic, template-based assumption generation from work type,
+  scope selections, unknown items, systems involved, and AI
+  selections). Generated assumptions are editable and explicitly not
+  presented as approved facts until confirmed at Review (EAP.M1.UI1-D1
+  correction 6).
+- New configuration files: `data/work_types.json`,
+  `data/scope_checklist_items.json`, `data/assumption_templates.json`,
+  `data/ai_help_options.json`. All are schema-validated at load with
+  the same controlled-`ConfigurationError` pattern as MVP.M1's
+  configuration.
+- **Standing policy recorded (EAP.M1.UI1-D1 correction 7): every future
+  MVP.M milestone ends with automated validation, local Streamlit
+  startup, a browser-based UI review checklist, and explicit user
+  acceptance, before the next milestone begins.** This is a
+  process/documentation requirement, not a code change; see
+  `docs/architecture.md` section 22.
+- Confirmed test-tooling limitation: `st.segmented_control` (used for
+  the compact scope-checklist status control) shares the same
+  `streamlit.testing.v1.AppTest` multi-rerun limitation already
+  documented for `st.radio`/`st.selectbox`. `st.data_editor` (used by
+  the illustrative pricing preview) has no `AppTest` interaction
+  wrapper at all in this Streamlit version; that section's live-edit
+  behavior is verified manually in the browser review rather than by
+  an automated UI-driven test.
+
+**Source:** EAP.M1.UI1, run from the live repository root, following
+approval of the pre-edit file-scope report and the corrections in
+EAP.M1.UI1-D1.
+
+## 2026-07-31 -- Preliminary SOW outline and action navigation (EAP.M1.UI2)
+
+**Decisions confirmed:**
+
+- Added a differentiated action-navigation row to the Step 5 results
+  screen: **Generate Preliminary SOW Outline** (active), **Generate
+  Final SOW** (disabled, "Requires approved resource plan and
+  pricing"), **Export to Excel** and **Export to PowerPoint** (disabled,
+  "Coming in a later milestone"), **Build Resource Plan** (disabled,
+  "Available in MVP.M2"). No active, unqualified "Generate SOW" button
+  exists (EAP.M1.UI2-D1 correction 7).
+- Added `src/sow_outline_engine.py`: a lightweight, milestone-scoped
+  Responsible-AI-style pre-generation gate
+  (`evaluate_pre_generation_gate`) and a deterministic, template-based
+  21-section preliminary SOW outline builder
+  (`build_preliminary_sow_outline`), plus Markdown/plain-text
+  renderers. This is explicitly not the governed MVP.M6
+  `sow_generator.py`.
+- The gate only ever returns `Human Review Required` or `Generation
+  Blocked` at this milestone -- `Ready for AI Drafting` is intentionally
+  unreachable because "timeline is preliminary" is unconditionally true
+  before MVP.M6 introduces a governed final duration. The full
+  three-status model is preserved on `ResponsibleAIGateResult` for
+  MVP.M6 (EAP.M1.UI2-D1 correction 1). On success the UI shows:
+  "Preliminary outline generated successfully. Human review is required
+  before this content may be used externally." -- never presented as
+  an error.
+- Unknown scope items are surfaced by construction (always rendered in
+  "Items requiring confirmation," no concealment code path exists) and
+  always contribute to the Human Review Required warnings. Test
+  `test_unknown_items_always_appear_and_cannot_be_concealed` proves
+  this directly (EAP.M1.UI2-D1 correction 2).
+- Risky-language detection blocks only on narrow, clearly-risky phrases
+  ("guaranteed delivery," "100% uptime," "zero defects," "no downtime,"
+  "guaranteed accuracy"), SSN-shaped values, and credential-looking
+  `key: value` patterns; a single ambiguous word (e.g., "guarantee,"
+  "password" alone) only adds a Human-Review warning, never blocks.
+  Documented as a simple keyword safeguard, explicitly not a real
+  confidential-data or compliance classifier (EAP.M1.UI2-D1
+  correction 3).
+- Added `data/sow_outline_templates.json` (customer responsibilities,
+  vendor responsibilities, next steps) as new governed prototype
+  content -- tool-agnostic, non-binding, free of rates/final dates/
+  service levels/guarantees/legal terms, flagged for business review
+  (EAP.M1.UI2-D1 correction 4).
+- Extended `assumption_engine.generate_assumptions` with optional
+  keyword-only parameters (`excluded_item_labels`, `system_context`,
+  `ai_data`, `contract_term`, `known_dependencies`); existing callers
+  and tests are unchanged and continue to pass; the function always
+  builds a fresh list rather than mutating a previously returned one
+  (EAP.M1.UI2-D1 correction 5). Added a "Known dependencies" input to
+  Step 2's optional "Additional details" section so this driver has an
+  actual UI source.
+- The preliminary outline contains only already-captured/validated
+  MVP.M1 data: business objective, work type, system context, audience,
+  included/excluded/unknown scope, systems involved, complexity-
+  informed size, sprint range, estimated duration, contract-fit
+  result, AI selections (only when applicable), proposed assumptions,
+  dependencies, risks/open questions, customer/vendor responsibilities,
+  next steps, and the mandatory disclaimer verbatim exactly once. It
+  never imports `RoleRatePreviewRow`/`RoleRatePreviewSet` or any
+  illustrative pricing-preview value -- structurally impossible to leak
+  those into the outline, not just filtered at runtime (EAP.M1.UI2-D1
+  correction 6).
+- Download boundary: Markdown or plain text only, via `st.download_button`;
+  no DOCX, PDF, Excel, or PowerPoint generation was introduced.
+- No deterministic estimation engine
+  (`complexity_engine.py`/`sizing_engine.py`/`contract_fit.py`) was
+  modified. No phase/resource engine, rate-card engine, commercial-
+  approval logic, support-pricing engine, database, authentication, or
+  LLM integration was introduced.
+
+**Source:** EAP.M1.UI2, run from the live repository root, following
+approval of the pre-edit file-scope report and the corrections in
+EAP.M1.UI2-D1.

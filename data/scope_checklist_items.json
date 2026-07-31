@@ -1,0 +1,162 @@
+{
+  "categories": [
+    {
+      "key": "application_layers",
+      "label": "Application layers",
+      "applies_to_work_types": ["new_project", "enhancement", "production_support"],
+      "items": [
+        {
+          "key": "ui_frontend",
+          "label": "User interface or frontend",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "business_logic",
+          "label": "Business logic or service layer",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "backend_processing",
+          "label": "Backend processing",
+          "defaults": {"new_project": "included", "enhancement": "unknown", "production_support": "unknown"}
+        },
+        {
+          "key": "database_data_model",
+          "label": "Database or data model",
+          "defaults": {"new_project": "included", "enhancement": "unknown", "production_support": "unknown"}
+        },
+        {
+          "key": "api_integration",
+          "label": "API or system integration",
+          "defaults": {"new_project": "unknown", "enhancement": "unknown", "production_support": "unknown"}
+        },
+        {
+          "key": "reporting_analytics",
+          "label": "Reporting or analytics",
+          "defaults": {"new_project": "unknown", "enhancement": "not_included", "production_support": "not_included"}
+        },
+        {
+          "key": "configuration_only",
+          "label": "Configuration only",
+          "defaults": {"new_project": "not_included", "enhancement": "unknown", "production_support": "unknown"}
+        },
+        {
+          "key": "infrastructure_deployment",
+          "label": "Infrastructure or deployment",
+          "defaults": {"new_project": "included", "enhancement": "not_included", "production_support": "not_included"}
+        }
+      ]
+    },
+    {
+      "key": "delivery_activities",
+      "label": "Delivery activities",
+      "applies_to_work_types": ["new_project", "enhancement", "production_support"],
+      "items": [
+        {
+          "key": "requirements_clarification",
+          "label": "Requirements clarification",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "solution_design",
+          "label": "Solution design",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "development_configuration",
+          "label": "Development or configuration",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "unit_testing",
+          "label": "Unit testing",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "integration_testing",
+          "label": "Integration testing",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "regression_testing",
+          "label": "Regression testing",
+          "defaults": {"new_project": "unknown", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "uat_support",
+          "label": "User acceptance support",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "not_included"}
+        },
+        {
+          "key": "deployment",
+          "label": "Deployment",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "rollback_planning",
+          "label": "Rollback planning",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "unknown"}
+        },
+        {
+          "key": "documentation",
+          "label": "Documentation",
+          "defaults": {"new_project": "included", "enhancement": "unknown", "production_support": "not_included"}
+        },
+        {
+          "key": "production_validation",
+          "label": "Production validation",
+          "defaults": {"new_project": "included", "enhancement": "included", "production_support": "included"}
+        }
+      ]
+    },
+    {
+      "key": "production_support_activities",
+      "label": "Production support activities",
+      "applies_to_work_types": ["production_support"],
+      "items": [
+        {
+          "key": "investigation_diagnosis",
+          "label": "Investigation or diagnosis",
+          "defaults": {"production_support": "included"}
+        },
+        {
+          "key": "root_cause_analysis",
+          "label": "Root-cause analysis",
+          "defaults": {"production_support": "unknown"}
+        },
+        {
+          "key": "corrective_action_not_yet_defined",
+          "label": "Corrective action not yet defined",
+          "defaults": {"production_support": "unknown"}
+        },
+        {
+          "key": "monitoring",
+          "label": "Monitoring",
+          "defaults": {"production_support": "unknown"}
+        },
+        {
+          "key": "stabilization",
+          "label": "Stabilization",
+          "defaults": {"production_support": "unknown"}
+        },
+        {
+          "key": "remediation",
+          "label": "Remediation",
+          "defaults": {"production_support": "unknown"}
+        }
+      ]
+    }
+  ],
+  "systems_involved_options": [
+    "Web application",
+    "Mobile application",
+    "API or integration",
+    "Database",
+    "Reporting or analytics",
+    "Cloud platform",
+    "Workflow or automation platform",
+    "AI or ML service",
+    "Other",
+    "Not yet known"
+  ]
+}

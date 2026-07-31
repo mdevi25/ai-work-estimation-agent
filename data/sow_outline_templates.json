@@ -1,0 +1,21 @@
+{
+  "customer_responsibilities": [
+    "Provide timely access to systems, environments, data, and stakeholders.",
+    "Review and confirm scope, assumptions, dependencies, and open questions.",
+    "Provide test data and support user acceptance activities.",
+    "Provide required approvals and decisions within agreed review periods."
+  ],
+  "vendor_responsibilities": [
+    "Perform only the work described in the preliminary included scope.",
+    "Surface material assumptions, risks, dependencies, and unknowns.",
+    "Provide status and clarification requests during planning.",
+    "Re-estimate material scope changes before commitment."
+  ],
+  "next_steps": [
+    "Confirm unknown scope items.",
+    "Validate assumptions and responsibilities.",
+    "Complete phase and resource planning.",
+    "Complete governed pricing and scenario approval.",
+    "Generate the final SOW only after downstream approvals."
+  ]
+}
