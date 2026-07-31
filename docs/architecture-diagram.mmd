@@ -1,0 +1,32 @@
+---
+title: AI Work Estimation and Pricing Assistant -- Bootstrap Skeleton (Current State)
+---
+flowchart TD
+    User["Internal user\n(estimation staff)"]
+
+    subgraph UI["UI layer -- app.py / pages/ (Streamlit)"]
+        Placeholder["Placeholder page\n(title + description only)"]
+    end
+
+    subgraph Engines["Engine layer -- src/ (empty, no logic yet)"]
+        FutureEngine["Deterministic engines\n(planned: MVP.M1+)"]
+    end
+
+    subgraph Config["Configuration -- data/ (empty, no rules yet)"]
+        FutureConfig["CSV / JSON business rules\n(planned: MVP.M1+)"]
+    end
+
+    subgraph FutureAI["AI adapter (not present -- deferred to MVP.M7)"]
+        AIAdapter["Replaceable AI provider interface\n(NOT YET IMPLEMENTED)"]
+    end
+
+    HumanReview["Human review point\n(required before any\ncustomer-facing output)"]
+
+    User -->|views| Placeholder
+    Placeholder -.->|planned data flow, MVP.M1+| FutureEngine
+    FutureEngine -.->|reads| FutureConfig
+    FutureEngine -.->|planned output| HumanReview
+    HumanReview -.->|approved values only| AIAdapter
+
+    classDef future stroke-dasharray: 5 5,opacity:0.6;
+    class FutureEngine,FutureConfig,AIAdapter,HumanReview future;
