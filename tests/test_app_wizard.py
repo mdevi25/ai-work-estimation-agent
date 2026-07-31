@@ -17,6 +17,7 @@ verification covers the live edit/recalculation behavior.
 """
 from __future__ import annotations
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from src.scope_defaults import compute_scope_confirmation_percentage, default_selections_for_work_type
@@ -322,8 +323,9 @@ def test_locked_actions_are_disabled_with_correct_labels():
     assert at.button(key="export_excel_locked").disabled is True
     assert at.button(key="export_excel_locked").help == "Coming in a later milestone"
     assert at.button(key="export_ppt_locked").disabled is True
-    assert at.button(key="build_resource_plan_locked").disabled is True
-    assert at.button(key="build_resource_plan_locked").help == "Available in MVP.M2"
+    # Build Resource Plan is intentionally NOT locked in EAP.M2 -- it's the
+    # active action this milestone introduces.
+    assert at.button(key="build_resource_plan").disabled is False
 
 
 def test_generate_preliminary_sow_outline_produces_outline():
@@ -390,3 +392,120 @@ def test_state_preserved_and_sidebar_intact_after_generating_outline():
     assert at.session_state["business_objective"] == "Reduce processing time by half"
     sidebar_text = "\n".join(m.value for m in at.sidebar.markdown)
     assert "Governed estimate" in sidebar_text
+
+
+# --- EAP.M2: phase and resource planning ------------------------------------
+
+
+def _build_resource_plan(at: AppTest):
+    at.button(key="build_resource_plan").click()
+    at.run()
+    return at.session_state["resource_plan_result"]
+
+
+def test_build_resource_plan_active_only_after_governed_estimate():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    at.run()
+    # Before "Confirm and generate estimate," no action row (and therefore no
+    # Build Resource Plan button) is rendered at all -- results is None.
+    assert at.session_state["results"] is None
+    assert "build_resource_plan" not in [b.key for b in at.button]
+
+
+def test_build_resource_plan_produces_rows_with_no_ai_when_off():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    plan = _build_resource_plan(at)
+    assert plan is not None
+    assert plan.rows
+    assert not any(r.is_ai_workstream for r in plan.rows)
+    assert plan.total_hours_ai_workstream == 0.0
+
+
+def test_build_resource_plan_includes_ai_rows_when_enabled():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    at.session_state["ai_included"] = "Yes"
+    at.session_state["ai_help"] = ["Generate content"]
+    at.session_state["ai_data"] = "Internal business information"
+    at.session_state["ai_human_review"] = "Always"
+    _generate_results(at)
+    plan = _build_resource_plan(at)
+    assert any(r.is_ai_workstream for r in plan.rows)
+    assert plan.total_hours_ai_workstream > 0
+
+
+def test_staffing_model_switch_preserves_total_required_hours():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    balanced_plan = _build_resource_plan(at)
+    balanced_total = sum(r.estimated_hours for r in balanced_plan.rows)
+
+    at.radio(key="w_staffing_model").set_value("Specialized")
+    at.run()
+    specialized_plan = at.session_state["resource_plan_result"]
+    specialized_total = sum(r.estimated_hours for r in specialized_plan.rows)
+
+    assert specialized_total == pytest.approx(balanced_total)
+    assert all(r.assigned_to == r.role for r in specialized_plan.rows)
+
+
+def test_customer_defined_shows_assignment_inputs():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.radio(key="w_staffing_model").set_value("Customer-defined")
+    at.run()
+    assignment_labels = [t.label for t in at.text_input if t.label and "Assigned person" in t.label]
+    assert assignment_labels
+
+
+def test_resource_plan_totals_render_in_plain_language():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Core IT workstream" in body
+    assert "By role" in body
+    assert "By phase" in body
+
+
+def test_resource_plan_transparency_expander_present():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    expander_labels = [e.label for e in at.expander]
+    assert any("How was resource effort calculated?" in label for label in expander_labels)
+
+
+def test_resource_plan_feeds_into_sow_outline_as_preliminary():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.button(key="generate_sow_outline").click()
+    at.run()
+    sections = at.session_state["sow_outline_sections"]
+    section_map = dict(sections)
+    assert "Preliminary phase and resource plan" in section_map
+    resource_section = section_map["Preliminary phase and resource plan"]
+    assert "preliminary planning information only" in resource_section
+    for forbidden in ("$", "hourly rate", "blended rate", "role cost", "margin", "contingency"):
+        assert forbidden not in resource_section.lower()
+
+
+def test_no_pricing_or_rate_functionality_introduced_in_resource_plan_ui():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    body = "\n".join(m.value for m in at.markdown).lower()
+    resource_plan_body = body.split("## resource plan", 1)[-1].split("future pricing interaction preview", 1)[0]
+    for forbidden in ("hourly rate", "blended rate", "role cost", "margin", "contingency", "customer price"):
+        assert forbidden not in resource_plan_body

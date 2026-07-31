@@ -234,3 +234,86 @@ def find_missing_required_fields(
             missing.append("Will a person review AI output?")
 
     return missing
+
+
+def validate_allocation_percent(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Allocation percent must be numeric")
+    if value < 0:
+        raise ValueError(f"Allocation percent cannot be negative, got {value}")
+    return float(value)
+
+
+def validate_phase_rules(data: dict) -> None:
+    phases_by_work_type = data.get("phases_by_work_type")
+    if not phases_by_work_type or set(phases_by_work_type.keys()) != set(VALID_WORK_TYPES):
+        raise ConfigurationError(
+            f"phase_rules.json must define phases_by_work_type for exactly: {sorted(VALID_WORK_TYPES)}"
+        )
+    for work_type, phases in phases_by_work_type.items():
+        if not phases:
+            raise ConfigurationError(f"phase_rules.json has no phases for work type '{work_type}'")
+        weight_total = 0.0
+        for phase in phases:
+            if not phase.get("key") or not phase.get("label"):
+                raise ConfigurationError(f"A phase for '{work_type}' is missing a key or label")
+            weight = phase.get("weight")
+            if not isinstance(weight, (int, float)) or isinstance(weight, bool) or weight < 0:
+                raise ConfigurationError(f"Phase '{phase.get('key')}' for '{work_type}' has an invalid weight")
+            weight_total += weight
+        if abs(weight_total - 1.0) > 1e-6:
+            raise ConfigurationError(
+                f"Phase weights for work type '{work_type}' must total 1.00, got {weight_total:.4f}"
+            )
+
+    ai_phases = data.get("ai_phases")
+    if not ai_phases:
+        raise ConfigurationError("phase_rules.json is missing ai_phases")
+    for phase in ai_phases:
+        if not phase.get("key") or not phase.get("label"):
+            raise ConfigurationError("An AI phase is missing a key or label")
+
+    ai_weight = data.get("ai_phase_weight_of_core_duration")
+    if not isinstance(ai_weight, (int, float)) or isinstance(ai_weight, bool) or not 0 <= ai_weight <= 1:
+        raise ConfigurationError("phase_rules.json's ai_phase_weight_of_core_duration must be between 0 and 1")
+
+
+def validate_resource_rules(data: dict) -> None:
+    hours_per_sprint = data.get("hours_per_sprint")
+    if not isinstance(hours_per_sprint, (int, float)) or isinstance(hours_per_sprint, bool) or hours_per_sprint <= 0:
+        raise ConfigurationError("resource_rules.json's hours_per_sprint must be a positive number")
+
+    roles_by_work_type = data.get("roles_by_work_type")
+    if not roles_by_work_type or set(roles_by_work_type.keys()) != set(VALID_WORK_TYPES):
+        raise ConfigurationError(
+            f"resource_rules.json must define roles_by_work_type for exactly: {sorted(VALID_WORK_TYPES)}"
+        )
+    for work_type, phases in roles_by_work_type.items():
+        if not phases:
+            raise ConfigurationError(f"resource_rules.json has no phase/role entries for '{work_type}'")
+        for phase_key, roles in phases.items():
+            if not roles:
+                raise ConfigurationError(f"Phase '{phase_key}' for '{work_type}' has no roles defined")
+            for role_entry in roles:
+                if not role_entry.get("role"):
+                    raise ConfigurationError(f"A role entry in phase '{phase_key}' for '{work_type}' has no role name")
+                validate_allocation_percent(role_entry.get("allocation_percent"))
+
+    for key in (
+        "ai_activity_to_phase_role",
+        "ai_help_fallback_activities",
+        "ai_baseline_activities",
+        "ai_independent_evaluation_activities",
+    ):
+        if not data.get(key):
+            raise ConfigurationError(f"resource_rules.json is missing {key}")
+
+
+def validate_role_combinations(data: dict) -> None:
+    if not data.get("compatible_combinations"):
+        raise ConfigurationError("role_combinations.json is missing compatible_combinations")
+    if not data.get("incompatible_combinations"):
+        raise ConfigurationError("role_combinations.json is missing incompatible_combinations")
+    for combo in data["incompatible_combinations"]:
+        if not combo.get("roles") or len(combo["roles"]) < 2 or not combo.get("reason"):
+            raise ConfigurationError("Each incompatible combination needs at least two roles and a reason")

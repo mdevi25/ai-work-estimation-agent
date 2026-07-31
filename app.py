@@ -19,7 +19,9 @@ from src.assumption_engine import generate_assumptions
 from src.complexity_engine import calculate_weighted_complexity, load_complexity_questions
 from src.config import ConfigurationError, load_json_config
 from src.contract_fit import calculate_contract_fit, sprint_to_months
-from src.models import COMPLEXITY_DIMENSION_KEYS, ComplexityDimensionAnswer, EstimateRequest
+from src.models import COMPLEXITY_DIMENSION_KEYS, ComplexityDimensionAnswer, EstimateRequest, ResourcePlanRow
+from src.phase_planner import build_phase_plan
+from src.resource_planner import build_resource_plan, load_resource_rules
 from src.running_estimate_preview import compute_preliminary_view
 from src.scope_defaults import (
     categories_for_work_type,
@@ -47,6 +49,7 @@ AUDIENCE_OPTIONS = ["Internal users", "Customers or external users", "Both", "No
 CONTRACT_TERM_OPTIONS = ["Quarterly", "Six months", "Nine months", "Annual", "Custom"]
 AI_INCLUDED_OPTIONS = ["No", "Yes", "Not sure"]
 SCOPE_STATUS_OPTIONS = ["Included", "Not included", "Unknown"]
+STAFFING_MODEL_OPTIONS = ["Lean", "Balanced", "Specialized", "Customer-defined"]
 SCOPE_STATUS_TO_KEY = {"Included": "included", "Not included": "not_included", "Unknown": "unknown"}
 SCOPE_KEY_TO_STATUS = {v: k for k, v in SCOPE_STATUS_TO_KEY.items()}
 
@@ -83,6 +86,10 @@ DEFAULTS = {
     "sow_outline_gate": None,
     "sow_outline_sections": None,
     "sow_outline_generated_at": None,
+    "staffing_model": "Balanced",
+    "customer_defined_assignments": {},
+    "resource_plan_result": None,
+    "resource_plan_rows_editable": None,
 }
 
 
@@ -873,6 +880,7 @@ def _generate_sow_outline() -> None:
         unknown_scope_labels=unknown_labels,
         dimension_display_names=dimension_display_names(),
         generated_at=st.session_state["sow_outline_generated_at"],
+        resource_plan=st.session_state["resource_plan_result"],
     )
 
 
@@ -905,15 +913,208 @@ def _render_action_navigation() -> None:
             key="export_ppt_locked",
         )
     with cols[4]:
-        st.button(
-            "Build Resource Plan",
-            disabled=True,
-            help="Available in MVP.M2",
-            key="build_resource_plan_locked",
-        )
+        if st.button("Build Resource Plan", key="build_resource_plan"):
+            _generate_resource_plan()
+
+    if st.session_state["resource_plan_rows_editable"] is not None:
+        _render_resource_plan_section()
 
     if st.session_state["sow_outline_gate"] is not None:
         _render_sow_outline_section()
+
+
+# ---------------------------------------------------------------------------
+# Phase and resource planning (EAP.M2)
+# ---------------------------------------------------------------------------
+
+
+def _generate_resource_plan() -> None:
+    results = st.session_state["results"]
+    estimate_request = results["estimate_request"]
+    sizing = results["sizing_result"]
+
+    phases = build_phase_plan(
+        work_type=estimate_request.work_type,
+        total_sprints=sizing.max_sprints,
+        ai_included=estimate_request.ai_included,
+        ai_workstream_activities=estimate_request.ai_workstream_activities,
+        ai_help=estimate_request.ai_help,
+    )
+    plan = build_resource_plan(
+        work_type=estimate_request.work_type,
+        phases=phases,
+        ai_included=estimate_request.ai_included,
+        staffing_model=st.session_state["staffing_model"],
+        ai_workstream_activities=estimate_request.ai_workstream_activities,
+        ai_help=estimate_request.ai_help,
+        customer_defined_assignments=st.session_state["customer_defined_assignments"] or None,
+    )
+    st.session_state["resource_plan_result"] = plan
+    duration_by_phase = {p.phase_key: p.duration_sprints for p in plan.phases}
+    st.session_state["resource_plan_rows_editable"] = [
+        {
+            "Phase": row.phase_label,
+            "Role": row.role,
+            "AI workstream": row.is_ai_workstream,
+            "Duration (sprints)": duration_by_phase[row.phase_key],
+            "Allocation %": row.allocation_percent,
+            "Person-sprints": row.person_sprints,
+            "Estimated hours": row.estimated_hours,
+            "_phase_key": row.phase_key,
+            "_role": row.role,
+            "_assigned_to": row.assigned_to,
+        }
+        for row in plan.rows
+    ]
+
+
+def _render_resource_plan_section() -> None:
+    from src.resource_planner import compute_totals, compute_warnings
+
+    st.divider()
+    st.markdown("## Resource plan")
+    st.caption(
+        "Preliminary planning information only -- not a final staffing commitment. Duration and "
+        "allocation are editable below; person-sprints and hours recalculate immediately."
+    )
+
+    current_model = st.session_state["staffing_model"]
+    model_index = STAFFING_MODEL_OPTIONS.index(current_model) if current_model in STAFFING_MODEL_OPTIONS else 1
+    selected_model = st.radio(
+        "Staffing model",
+        STAFFING_MODEL_OPTIONS,
+        index=model_index,
+        key="w_staffing_model",
+        horizontal=True,
+        help="Changes only who is assigned to combined roles -- required effort per role never changes.",
+    )
+    if selected_model != st.session_state["staffing_model"]:
+        st.session_state["staffing_model"] = selected_model
+        _generate_resource_plan()
+        st.rerun()
+
+    if selected_model == "Customer-defined":
+        with st.expander("Customer-defined role assignments", expanded=True):
+            unique_roles = sorted({row["_role"] for row in st.session_state["resource_plan_rows_editable"]})
+            assignments = dict(st.session_state["customer_defined_assignments"])
+            for role in unique_roles:
+                assignments[role] = st.text_input(
+                    f"Assigned person for {role}",
+                    value=assignments.get(role, role),
+                    key=f"w_assign_{role}",
+                )
+            if st.button("Apply assignments", key="apply_customer_assignments"):
+                st.session_state["customer_defined_assignments"] = assignments
+                _generate_resource_plan()
+                st.rerun()
+
+    editable_rows = st.session_state["resource_plan_rows_editable"]
+    display_df = pd.DataFrame(editable_rows).drop(columns=["_phase_key", "_role", "_assigned_to"])
+    edited_df = st.data_editor(
+        display_df,
+        column_config={
+            "Phase": st.column_config.TextColumn("Phase", disabled=True),
+            "Role": st.column_config.TextColumn("Role", disabled=True),
+            "AI workstream": st.column_config.CheckboxColumn("AI workstream", disabled=True),
+            "Duration (sprints)": st.column_config.NumberColumn("Duration (sprints)", min_value=0.0, step=0.25),
+            "Allocation %": st.column_config.NumberColumn("Allocation %", min_value=0.0, step=5.0),
+            "Person-sprints": st.column_config.NumberColumn("Person-sprints", disabled=True),
+            "Estimated hours": st.column_config.NumberColumn("Estimated hours", disabled=True),
+        },
+        hide_index=True,
+        key="resource_plan_editor",
+    )
+    st.caption(
+        "Tip: if you change a phase's duration, update it on every row for that phase to keep "
+        "totals consistent."
+    )
+
+    resource_rules = load_resource_rules()
+    hours_per_sprint = resource_rules["hours_per_sprint"]
+
+    recalculated_rows: list[ResourcePlanRow] = []
+    updated_editable: list[dict] = []
+    for index, row in edited_df.iterrows():
+        duration = float(row["Duration (sprints)"])
+        allocation = float(row["Allocation %"])
+        person_sprints = round(duration * allocation / 100, 4)
+        estimated_hours = round(person_sprints * hours_per_sprint, 2)
+        original = editable_rows[index]
+        recalculated_rows.append(
+            ResourcePlanRow(
+                phase_key=original["_phase_key"],
+                phase_label=row["Phase"],
+                role=row["Role"],
+                allocation_percent=allocation,
+                person_sprints=person_sprints,
+                estimated_hours=estimated_hours,
+                is_ai_workstream=bool(row["AI workstream"]),
+                assigned_to=original["_assigned_to"],
+            )
+        )
+        updated_editable.append(
+            {
+                "Phase": row["Phase"],
+                "Role": row["Role"],
+                "AI workstream": row["AI workstream"],
+                "Duration (sprints)": duration,
+                "Allocation %": allocation,
+                "Person-sprints": person_sprints,
+                "Estimated hours": estimated_hours,
+                "_phase_key": original["_phase_key"],
+                "_role": original["_role"],
+                "_assigned_to": original["_assigned_to"],
+            }
+        )
+    st.session_state["resource_plan_rows_editable"] = updated_editable
+
+    plan = st.session_state["resource_plan_result"]
+    phases_for_warnings = [
+        p.model_copy(update={"duration_sprints": next(
+            (r["Duration (sprints)"] for r in updated_editable if r["_phase_key"] == p.phase_key), p.duration_sprints
+        )})
+        for p in plan.phases
+    ]
+    warnings = compute_warnings(recalculated_rows, phases_for_warnings, ai_enabled=estimate_request_ai_enabled())
+    totals = compute_totals(recalculated_rows)
+    st.session_state["resource_plan_result"] = plan.model_copy(
+        update={"rows": recalculated_rows, "warnings": warnings, **totals}
+    )
+
+    st.markdown("### Totals")
+    cols = st.columns(2)
+    with cols[0]:
+        st.markdown("**By role**")
+        for role, hours in totals["total_hours_by_role"].items():
+            st.markdown(f"- {role}: {hours:g} hours")
+    with cols[1]:
+        st.markdown("**By phase**")
+        for phase, hours in totals["total_hours_by_phase"].items():
+            st.markdown(f"- {phase}: {hours:g} hours")
+    st.markdown(f"**Core IT workstream:** {totals['total_hours_core_it']:g} hours")
+    if totals["total_hours_ai_workstream"]:
+        st.markdown(f"**Optional AI workstream:** {totals['total_hours_ai_workstream']:g} hours")
+
+    if warnings:
+        st.markdown("### Resource warnings")
+        for warning in warnings:
+            st.warning(warning)
+
+    with st.expander("How was resource effort calculated?"):
+        st.markdown("Person-sprints = phase duration in sprints × (allocation % ÷ 100)")
+        st.markdown(f"Estimated hours = person-sprints × {hours_per_sprint:g} hours per sprint")
+        for row in recalculated_rows:
+            st.markdown(
+                f"- **{row.role}** in *{row.phase_label}*: "
+                f"{next((r['Duration (sprints)'] for r in updated_editable if r['_phase_key'] == row.phase_key and r['_role'] == row.role), 0):g} "
+                f"sprints × {row.allocation_percent:.0f}% = {row.person_sprints:g} person-sprints; "
+                f"{row.person_sprints:g} × {hours_per_sprint:g} = {row.estimated_hours:g} hours"
+            )
+
+
+def estimate_request_ai_enabled() -> bool:
+    results = st.session_state["results"]
+    return results is not None and results["estimate_request"].ai_included != "No"
 
 
 def _render_sow_outline_section() -> None:

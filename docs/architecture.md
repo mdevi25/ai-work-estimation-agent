@@ -22,33 +22,37 @@ application directly.
 ## 3. Scope
 
 This document covers what is implemented through **MVP.M1 —
-Estimation foundation**, as remediated by **EAP.M1.UI1 — Self-Service
-UI and Estimate Interaction Remediation** and **EAP.M1.UI2 —
-Preliminary SOW Outline and Action Navigation**: a guided, self-service
-5-step Streamlit wizard (`app.py`) with a persistent left-side panel,
-that captures estimate intake, a suggested/correctable scope checklist,
-and complexity answers, and the same three unchanged deterministic
-engines (`src/complexity_engine.py`, `src/sizing_engine.py`,
-`src/contract_fit.py`) that compute weighted complexity, Relative Job
-Size / T-shirt size / sprint range, and contract-duration fit from
-governed JSON configuration under `data/`. It also adds a differentiated
-action-navigation row on the results screen and a deterministic
-**preliminary SOW outline** generator (`src/sow_outline_engine.py`) —
-explicitly not the governed MVP.M6 SOW capability. It establishes the
-separation of UI, engines, configuration, and data flow required by
+Estimation foundation** (remediated by **EAP.M1.UI1** and
+**EAP.M1.UI2**) and **MVP.M2 — Phase and Resource Planning**: a guided,
+self-service 5-step Streamlit wizard (`app.py`) with a persistent
+left-side panel, that captures estimate intake, a suggested/
+correctable scope checklist, and complexity answers, feeding the three
+unchanged deterministic estimation engines (`src/complexity_engine.py`,
+`src/sizing_engine.py`, `src/contract_fit.py`) that compute weighted
+complexity, Relative Job Size / T-shirt size / sprint range, and
+contract-duration fit from governed JSON configuration under `data/`.
+It adds a differentiated action-navigation row on the results screen, a
+deterministic **preliminary SOW outline** generator
+(`src/sow_outline_engine.py` — explicitly not the governed MVP.M6 SOW
+capability), and now a deterministic **phase and resource planning**
+pair (`src/phase_planner.py`, `src/resource_planner.py`) that derives
+an editable phase/role/hours plan from the governed sizing result —
+with no rates, cost, or price anywhere. It establishes the separation
+of UI, engines, configuration, and data flow required by
 architecture-governance Gate 1.
 
 ## 4. Out-of-scope items
 
-No resource-planning, pricing, contingency, margin, support
-estimation, final/customer-approved SOW generation, or AI logic exists yet
-— all deferred to MVP.M2 through MVP.M7 and **not implemented in this
-repository**. Database, authentication, Docker, paid APIs, and
-Excel/PowerPoint export are out of scope for early milestones per
-`CLAUDE.md` and are not present here. The optional AI-capability
-intake field captured by the wizard (Step 5) is limited to intake-only
-data — no AI phase, role, effort, cost, or pricing logic exists
-anywhere in this milestone, regardless of that field's value.
+No pricing, contingency, margin, support estimation, final/customer-
+approved SOW generation, or AI logic exists yet — all deferred to
+MVP.M3 through MVP.M7 and **not implemented in this repository**.
+Database, authentication, Docker, paid APIs, and Excel/PowerPoint
+export are out of scope for early milestones per `CLAUDE.md` and are
+not present here. The optional AI-capability intake field captured by
+the wizard (Step 2/4) drives an optional AI *workstream* in the phase/
+resource plan (MVP.M2) but still carries no cost, rate, or pricing
+logic anywhere — that remains MVP.M3/M4 scope regardless of AI
+selection.
 
 ## 5. Current project stage
 
@@ -174,12 +178,29 @@ simpler to guarantee that way than across independently-routed pages.
   data — structurally cannot leak pricing-preview values into the
   outline. Not the governed `sow_generator.py` described in
   `ENGINE-RESPONSIBILITIES.md` section 11 (MVP.M6).
+- **`src/phase_planner.py`** — selects phases by work type and derives
+  each phase's duration in sprints from the governed sizing result
+  (`SizingResult.max_sprints`, weighted per `data/phase_rules.json`),
+  plus the optional AI workstream's phases (only when AI is enabled,
+  driven by the effective AI activity set). Does not assign roles,
+  calculate hours, or calculate cost.
+- **`src/resource_planner.py`** — required roles by phase, the
+  `person_sprints`/`estimated_hours` formulas, staffing-model combined-
+  assignment views (Lean/Balanced/Specialized/Customer-defined —
+  required effort per role is identical across all four), and resource
+  warnings (over-allocation, incompatible combinations, missing
+  deployment/stabilization coverage, missing independent AI evaluation
+  coverage). Does not apply rates or calculate cost or price.
 - **`data/`** — governed JSON configuration only: complexity weights,
   the 7-dimension × 6-level answer scale, sizing bands, contract
   terms, the original 7-value estimate-type catalog (internal
   compatibility), the 3-value work-type catalog, the scope-checklist
   catalog and defaults, assumption templates, the simplified AI-intake
-  option catalog, the preliminary SOW outline's responsibility/
+  option catalog, phase rules (duration weights per work type plus the
+  4 AI-workstream phases), resource rules (required roles/allocation
+  per phase, `hours_per_sprint`, the AI-activity-to-phase/role
+  mapping), role-combination rules (compatible and incompatible
+  combinations), the preliminary SOW outline's responsibility/
   next-steps templates, and the original AI workstream activity
   catalog (retained for the advanced/optional AI section). No customer
   data, commercial data, real rates, or secrets.
@@ -230,11 +251,29 @@ and its three structured results to
 Blocked`, the same data passes to
 `sow_outline_engine.build_preliminary_sow_outline`, which reads
 `data/sow_outline_templates.json` for its responsibility/next-steps
-content and returns the 21 ordered sections → `app.py` renders them
-with a "Preliminary Draft" status badge and offers a Markdown/plain-
-text download. This flow never reads `RoleRatePreviewRow`/
-`RoleRatePreviewSet` or the illustrative pricing-preview section's
-session state.
+content and returns the ordered sections (21, or 22 when a resource
+plan exists) → `app.py` renders them with a "Preliminary Draft" status
+badge and offers a Markdown/plain-text download. This flow never reads
+`RoleRatePreviewRow`/`RoleRatePreviewSet` or the illustrative
+pricing-preview section's session state.
+
+**Phase and resource planning flow (MVP.M2, no rates or cost):** after
+the primary flow produces a result, selecting "Build Resource Plan"
+passes the work type, `SizingResult.max_sprints`, AI selections, and
+the chosen staffing model to `phase_planner.build_phase_plan` (core
+phases always; AI phases only when AI is enabled, sized from the same
+governed sizing result) → the resulting phases pass to
+`resource_planner.build_resource_plan`, which computes the required-
+effort table (`person_sprints`/`estimated_hours` per phase/role,
+constant regardless of staffing model), applies the selected staffing
+model's combined-assignment view, and computes warnings → `app.py`
+renders an editable table (`st.data_editor`) where duration and
+allocation edits are recalculated immediately by re-deriving
+`ResourcePlanRow`s and re-running `compute_warnings`/`compute_totals`
+live. The resulting `ResourcePlanResult` optionally flows into the
+preliminary SOW outline (above) as additional preliminary planning
+information — phases, roles, and hours only, never rates or cost
+(`ResourcePlanResult` has no such fields to leak).
 
 No sensitive data, PII, or credentials are collected — inputs are
 structured selections, short business-objective text, and complexity
@@ -443,15 +482,67 @@ working tree.
   pricing-preview leakage into the outline a structural impossibility
   rather than something enforced only by a runtime filter (backed by
   `test_outline_never_contains_pricing_preview_indicators`).
+- **Phase durations are derived from `SizingResult.max_sprints` ×
+  configured per-phase weight (weights sum to 1.00 per work type),
+  rather than fixed sprint counts per work type:** this ties the phase
+  plan to *this estimate's* governed size (satisfying "generate an
+  initial phase plan from the governed estimate result"), rather than
+  a template unrelated to the actual sizing. `contract_fit.py` itself
+  is unchanged and still uses `SizingResult.max_sprints` directly as
+  MVP.M1 established — this milestone does not switch contract-fit to
+  a phase-plan-derived duration source (`CONTRACT-FIT.md` §3 makes that
+  switch optional ("may"), and it wasn't requested for MVP.M2).
+- **Required effort (`person_sprints`/`estimated_hours` per phase/role)
+  is computed independently of staffing model; staffing model only
+  changes the `assigned_to` combined-assignment view:** this is the
+  literal "required role vs. required effort vs. assigned person"
+  separation in `PHASE-RESOURCE-PLANNING.md` §5. Verified directly:
+  `test_effort_totals_identical_across_all_staffing_models` asserts
+  identical total hours across Lean/Balanced/Specialized/Customer-
+  defined for the same phase plan.
+- **The optional AI workstream's detailed activity set falls back to a
+  derived mapping from the simplified "AI help" answers when the
+  optional/advanced detailed-activity picklist is empty:** MVP.M1.UI1's
+  primary AI intake only collects the simplified `ai_help` answers; the
+  detailed 27-activity catalog lives in a collapsed advanced section
+  users may skip. Per `PHASE-RESOURCE-PLANNING.md` §12.1 ("add only the
+  applicable AI phases and roles identified from the selected AI
+  workstream activities"), an AI-enabled estimate with no detailed
+  activities selected still needs *some* defensible activity set rather
+  than an empty AI workstream — `data/resource_rules.json`'s
+  `ai_help_fallback_activities` provides that mapping, and
+  `ai_baseline_activities` (use-case definition, Responsible AI review)
+  is always included regardless, per `ESTIMATE-TYPES.md` §11.5's rule
+  that required oversight is never a simplification to drop.
+- **AI workstream phase durations are sized as a fixed fraction
+  (`ai_phase_weight_of_core_duration`, 0.25) of the core IT total,
+  split evenly across whichever AI phases are actually triggered:**
+  a configurable prototype assumption, not a governed formula — no
+  reference file specifies AI-workstream duration sizing, so this is
+  new content flagged here for business review, the same as the other
+  configurable assumptions in this document.
+- **The single-table resource-plan editor allows duration to be edited
+  per row rather than once per phase:** since a phase can have multiple
+  role rows, editing duration on one row does not automatically update
+  other rows for the same phase. This is a documented, deliberate
+  simplification for a self-service `st.data_editor` table (see
+  Known limitations) rather than a normalized two-table design, to
+  satisfy the requirement for one combined, editable Phase/Duration/
+  Role/Allocation/Person-sprints/Hours view.
 
 ## 20. Known limitations
 
-- No phase planning, resource planning, pricing, support, final/
-  customer-approved SOW, or AI logic exists — this document describes
-  MVP.M1 only, per the milestone-discipline rule in `CLAUDE.md`. The
-  preliminary SOW outline (EAP.M1.UI2) is explicitly a draft-only,
-  always-human-review-required artifact, not the governed MVP.M6
-  capability.
+- No pricing, support, final/customer-approved SOW, or AI logic exists
+  — this document describes MVP.M1 and MVP.M2 only, per the
+  milestone-discipline rule in `CLAUDE.md`. The preliminary SOW outline
+  (EAP.M1.UI2) is explicitly a draft-only, always-human-review-required
+  artifact, not the governed MVP.M6 capability.
+- The resource-plan editor lets duration be edited per row rather than
+  once per phase (see §19) — editing one role's row for a phase does
+  not propagate to other roles in that same phase automatically.
+- AI-workstream phase-duration sizing (`ai_phase_weight_of_core_duration`)
+  is a configurable prototype assumption authored for this milestone,
+  not sourced from a governed reference (see §19).
 - Wizard state is transient: closing the browser tab or restarting the
   app loses all in-progress input. There is no save/resume capability
   and none is planned before a milestone explicitly adds persistence.
@@ -478,15 +569,20 @@ working tree.
 
 ## 21. Future considerations
 
-- MVP.M2 introduces phase and resource planning and will consume
-  `SizingResult`/`ContractFitResult` as its duration source, per
-  `CONTRACT-FIT.md` §3 — no phase/resource code exists yet.
 - MVP.M3–M5 introduce baseline pricing, commercial pricing, and support
-  estimation. `RoleRatePreviewRow`/`RoleRatePreviewSet` (§19) offer a
-  UI-ready shape MVP.M3/M4 may adopt for the real, governed
-  `pricing_engine.py` and `data/rate_card.csv`, but none of that real
-  logic, nor any pricing-adjacent data model wired to `EstimateRequest`,
-  exists in this repository yet.
+  estimation. `ResourcePlanResult`'s `estimated_hours` per role/phase
+  (MVP.M2) is designed to feed `pricing_engine.py`'s `role_cost`
+  formula directly (`PRICING-RULES.md` §2). `RoleRatePreviewRow`/
+  `RoleRatePreviewSet` (§19) offer a UI-ready shape MVP.M3/M4 may adopt
+  for the real, governed `pricing_engine.py` and `data/rate_card.csv`,
+  but none of that real logic, nor any pricing-adjacent data model
+  wired to `EstimateRequest` or `ResourcePlanResult`, exists in this
+  repository yet.
+- MVP.M2's phase/resource plan is currently regenerated fresh each time
+  and not itself part of `EstimateRequest` — MVP.M3 will need to decide
+  whether the resource plan becomes a persisted-in-session, human-
+  approved input (mirroring `PRICING-RULES.md` §11's scenario model)
+  rather than a recomputed-on-click view.
 - MVP.M6 introduces the governed, final SOW capability
   (`sow_generator.py`) and customer-facing output, and will require
   revisiting §9's internal/customer-view separation, since this

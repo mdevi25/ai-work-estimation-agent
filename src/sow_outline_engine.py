@@ -25,11 +25,14 @@ from __future__ import annotations
 
 import re
 
+from typing import Optional
+
 from src.config import ConfigurationError, load_json_config
 from src.models import (
     ComplexityResult,
     ContractFitResult,
     EstimateRequest,
+    ResourcePlanResult,
     ResponsibleAIGateResult,
     SizingResult,
 )
@@ -190,12 +193,17 @@ def build_preliminary_sow_outline(
     unknown_scope_labels: list[str],
     dimension_display_names: dict[str, str],
     generated_at: str,
+    resource_plan: Optional[ResourcePlanResult] = None,
 ) -> list[tuple[str, str]]:
-    """Build the 21-section preliminary outline. Callers must only invoke
-    this after `evaluate_pre_generation_gate` returns a non-blocked result.
+    """Build the preliminary outline (21 sections, or 22 when a resource
+    plan is supplied -- see the optional "Preliminary phase and resource
+    plan" section appended near the end). Callers must only invoke this
+    after `evaluate_pre_generation_gate` returns a non-blocked result.
 
-    Uses only already-captured/validated MVP.M1 data -- never the
-    illustrative pricing-preview values, which this module never imports.
+    Uses only already-captured/validated data -- never the illustrative
+    pricing-preview values, which this module never imports. `resource_plan`
+    (MVP.M2) contributes phase/role/hours information only -- no rates,
+    cost, or price exist on that model to leak.
     """
     templates = _load_outline_templates()
 
@@ -292,9 +300,50 @@ def build_preliminary_sow_outline(
     sections.append(("Customer responsibilities", _bullet_list(templates["customer_responsibilities"], "None documented.")))
     sections.append(("Vendor responsibilities", _bullet_list(templates["vendor_responsibilities"], "None documented.")))
     sections.append(("Next steps", _bullet_list(templates["next_steps"], "None documented.")))
+
+    if resource_plan is not None:
+        sections.append(
+            ("Preliminary phase and resource plan", _render_resource_plan_summary(resource_plan))
+        )
+
     sections.append(("Mandatory disclaimer", MANDATORY_DISCLAIMER))
 
     return sections
+
+
+def _render_resource_plan_summary(resource_plan: ResourcePlanResult) -> str:
+    """Preliminary planning information only -- phases, roles, and hours.
+    Never rates, cost, price, margin, or payment terms (none exist on
+    ResourcePlanResult to render).
+    """
+    lines = [
+        "This phase and resource plan is preliminary planning information only, "
+        f"using the \"{resource_plan.staffing_model}\" staffing pattern. It is not an approved "
+        "resource commitment.",
+        "",
+        "Phases:",
+    ]
+    for phase in resource_plan.phases:
+        workstream = " (AI workstream)" if phase.is_ai_workstream else ""
+        lines.append(f"- {phase.phase_label}{workstream}: {phase.duration_sprints:g} sprints")
+
+    lines.append("")
+    lines.append("Estimated hours by role:")
+    for role, hours in resource_plan.total_hours_by_role.items():
+        lines.append(f"- {role}: {hours:g} hours")
+
+    lines.append("")
+    lines.append(f"Core IT workstream: {resource_plan.total_hours_core_it:g} hours.")
+    if resource_plan.total_hours_ai_workstream:
+        lines.append(f"Optional AI workstream: {resource_plan.total_hours_ai_workstream:g} hours.")
+
+    if resource_plan.warnings:
+        lines.append("")
+        lines.append("Resource-plan warnings for review:")
+        for warning in resource_plan.warnings:
+            lines.append(f"- {warning}")
+
+    return "\n".join(lines)
 
 
 def render_outline_as_markdown(sections: list[tuple[str, str]], estimate_name: str, generated_at: str) -> str:

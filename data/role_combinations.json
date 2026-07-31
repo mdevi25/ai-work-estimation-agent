@@ -1,0 +1,33 @@
+{
+  "compatible_combinations": [
+    {"roles": ["Solution Architect", "Senior Developer"], "staffing_models": ["Lean", "Balanced"]},
+    {"roles": ["Developer", "DevOps"], "staffing_models": ["Lean"]},
+    {"roles": ["Business Analyst", "QA"], "staffing_models": ["Lean"]}
+  ],
+  "incompatible_combinations": [
+    {
+      "roles": ["Developer", "QA"],
+      "reason": "The same person cannot be both the developer and the sole independent tester for the same work -- this removes the separation between builder and tester."
+    },
+    {
+      "roles": ["Senior Developer", "QA"],
+      "reason": "The same person cannot be both the developer and the sole independent tester for the same work -- this removes the separation between builder and tester."
+    },
+    {
+      "roles": ["AI Application Engineer", "Responsible AI Reviewer"],
+      "reason": "The same person cannot build the AI feature and serve as its sole Responsible AI reviewer."
+    },
+    {
+      "roles": ["AI or Solution Architect", "Responsible AI Reviewer"],
+      "reason": "The same person cannot architect the AI feature and serve as its sole Responsible AI reviewer."
+    },
+    {
+      "roles": ["AI Application Engineer", "Security or Privacy Reviewer"],
+      "reason": "The same person cannot build the AI feature and serve as its sole security or privacy reviewer."
+    },
+    {
+      "roles": ["ML Engineer", "QA or AI Evaluation Engineer"],
+      "reason": "The same person cannot build the model and serve as its sole independent evaluator."
+    }
+  ]
+}

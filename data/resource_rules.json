@@ -1,0 +1,132 @@
+{
+  "hours_per_sprint": 80,
+  "roles_by_work_type": {
+    "new_project": {
+      "discovery_and_requirements": [
+        {"role": "Business Analyst", "allocation_percent": 100},
+        {"role": "Solution Architect", "allocation_percent": 50}
+      ],
+      "solution_design": [
+        {"role": "Solution Architect", "allocation_percent": 100},
+        {"role": "Senior Developer", "allocation_percent": 50}
+      ],
+      "development": [
+        {"role": "Senior Developer", "allocation_percent": 100},
+        {"role": "Developer", "allocation_percent": 100},
+        {"role": "QA", "allocation_percent": 50}
+      ],
+      "system_regression_testing": [
+        {"role": "QA", "allocation_percent": 100},
+        {"role": "Developer", "allocation_percent": 25}
+      ],
+      "uat_support": [
+        {"role": "Business Analyst", "allocation_percent": 75},
+        {"role": "QA", "allocation_percent": 50}
+      ],
+      "deployment": [
+        {"role": "DevOps", "allocation_percent": 100},
+        {"role": "Developer", "allocation_percent": 25}
+      ],
+      "stabilization": [
+        {"role": "DevOps", "allocation_percent": 50},
+        {"role": "Developer", "allocation_percent": 25}
+      ]
+    },
+    "enhancement": {
+      "discovery_and_requirements": [
+        {"role": "Business Analyst", "allocation_percent": 100},
+        {"role": "Senior Developer", "allocation_percent": 25}
+      ],
+      "solution_design": [
+        {"role": "Senior Developer", "allocation_percent": 75}
+      ],
+      "development": [
+        {"role": "Senior Developer", "allocation_percent": 100},
+        {"role": "Developer", "allocation_percent": 100},
+        {"role": "QA", "allocation_percent": 50}
+      ],
+      "regression_testing": [
+        {"role": "QA", "allocation_percent": 100},
+        {"role": "Developer", "allocation_percent": 25}
+      ],
+      "uat_support": [
+        {"role": "Business Analyst", "allocation_percent": 50},
+        {"role": "QA", "allocation_percent": 50}
+      ],
+      "deployment": [
+        {"role": "DevOps", "allocation_percent": 75},
+        {"role": "Developer", "allocation_percent": 25}
+      ]
+    },
+    "production_support": {
+      "investigation": [
+        {"role": "Senior Developer", "allocation_percent": 100},
+        {"role": "Solution Architect", "allocation_percent": 25}
+      ],
+      "remediation_design": [
+        {"role": "Senior Developer", "allocation_percent": 75}
+      ],
+      "development": [
+        {"role": "Senior Developer", "allocation_percent": 75},
+        {"role": "Developer", "allocation_percent": 100}
+      ],
+      "regression_testing": [
+        {"role": "QA", "allocation_percent": 100}
+      ],
+      "deployment": [
+        {"role": "DevOps", "allocation_percent": 75}
+      ]
+    }
+  },
+  "ai_activity_to_phase_role": {
+    "AI use-case definition": {"phase": "ai_discovery_and_design", "role": "AI Product Manager or Product Owner"},
+    "AI suitability assessment": {"phase": "ai_discovery_and_design", "role": "AI or Solution Architect"},
+    "Data availability assessment": {"phase": "ai_discovery_and_design", "role": "Data Engineer"},
+    "Data-quality assessment": {"phase": "ai_discovery_and_design", "role": "Data Engineer"},
+    "Data preparation": {"phase": "ai_development_and_integration", "role": "Data Engineer"},
+    "Grounding-source preparation": {"phase": "ai_development_and_integration", "role": "Data Engineer"},
+    "Model or provider selection": {"phase": "ai_discovery_and_design", "role": "AI or Solution Architect"},
+    "AI architecture design": {"phase": "ai_discovery_and_design", "role": "AI or Solution Architect"},
+    "Prompt and instruction design": {"phase": "ai_development_and_integration", "role": "Prompt or Conversation Designer"},
+    "Retrieval or grounding design": {"phase": "ai_development_and_integration", "role": "AI or Solution Architect"},
+    "Model or output evaluation": {"phase": "ai_evaluation_and_testing", "role": "QA or AI Evaluation Engineer"},
+    "Prompt evaluation": {"phase": "ai_evaluation_and_testing", "role": "QA or AI Evaluation Engineer"},
+    "Hallucination and failure-mode testing": {"phase": "ai_evaluation_and_testing", "role": "QA or AI Evaluation Engineer"},
+    "Bias, fairness, and harmful-output evaluation where relevant": {"phase": "ai_evaluation_and_testing", "role": "Responsible AI Reviewer"},
+    "Privacy and sensitive-data review": {"phase": "ai_evaluation_and_testing", "role": "Security or Privacy Reviewer"},
+    "Security and abuse-case testing": {"phase": "ai_evaluation_and_testing", "role": "Security or Privacy Reviewer"},
+    "Human-review checkpoints": {"phase": "ai_evaluation_and_testing", "role": "Responsible AI Reviewer"},
+    "Escalation design": {"phase": "ai_development_and_integration", "role": "AI Application Engineer"},
+    "Fallback design": {"phase": "ai_development_and_integration", "role": "AI Application Engineer"},
+    "Deterministic fallback where appropriate": {"phase": "ai_development_and_integration", "role": "AI Application Engineer"},
+    "Observability and logging": {"phase": "ai_monitoring_and_governance", "role": "DevOps, MLOps, or Platform Engineer"},
+    "AI monitoring": {"phase": "ai_monitoring_and_governance", "role": "Support or Monitoring Engineer"},
+    "Cost and latency evaluation": {"phase": "ai_monitoring_and_governance", "role": "DevOps, MLOps, or Platform Engineer"},
+    "Model or provider change-risk assessment": {"phase": "ai_monitoring_and_governance", "role": "AI or Solution Architect"},
+    "Post-production evaluation": {"phase": "ai_monitoring_and_governance", "role": "QA or AI Evaluation Engineer"},
+    "Tuning and optimization": {"phase": "ai_development_and_integration", "role": "ML Engineer"},
+    "Responsible AI review and approval": {"phase": "ai_evaluation_and_testing", "role": "Responsible AI Reviewer"}
+  },
+  "ai_help_fallback_activities": {
+    "Summarize or classify information": ["AI use-case definition", "Model or output evaluation"],
+    "Search or retrieve information": ["AI use-case definition", "Retrieval or grounding design", "Model or output evaluation"],
+    "Generate content": ["AI use-case definition", "Prompt and instruction design", "Model or output evaluation", "Human-review checkpoints"],
+    "Recommend an action": ["AI use-case definition", "Model or output evaluation", "Human-review checkpoints"],
+    "Automate a workflow": ["AI use-case definition", "AI architecture design", "Fallback design", "Human-review checkpoints"],
+    "Predict an outcome": ["AI use-case definition", "Data-quality assessment", "Model or output evaluation"],
+    "Analyze documents or data": ["AI use-case definition", "Data availability assessment", "Model or output evaluation"],
+    "Other": ["AI use-case definition", "AI suitability assessment"],
+    "Not yet known": ["AI use-case definition"]
+  },
+  "ai_baseline_activities": [
+    "AI use-case definition",
+    "Responsible AI review and approval"
+  ],
+  "ai_independent_evaluation_activities": [
+    "Model or output evaluation",
+    "Prompt evaluation",
+    "Hallucination and failure-mode testing",
+    "Responsible AI review and approval"
+  ],
+  "ai_default_allocation_percent": 50
+}

@@ -295,3 +295,67 @@ EAP.M1.UI1-D1.
 **Source:** EAP.M1.UI2, run from the live repository root, following
 approval of the pre-edit file-scope report and the corrections in
 EAP.M1.UI2-D1.
+
+## 2026-07-31 -- Phase and resource planning (EAP.M2)
+
+**Decisions confirmed:**
+
+- Added `src/phase_planner.py` and `src/resource_planner.py`. Phase
+  durations are derived from the governed `SizingResult.max_sprints`
+  multiplied by a configured per-phase weight (weights sum to 1.00 per
+  work type), not from a fixed sprint count unrelated to the actual
+  estimate. `contract_fit.py` is unchanged and still uses
+  `SizingResult.max_sprints` directly, exactly as MVP.M1 established --
+  this milestone does not switch contract-fit to a phase-plan-derived
+  duration source.
+- Implemented the exact governed formulas: `person_sprints =
+  phase_duration_in_sprints * (allocation_percent / 100)`;
+  `estimated_hours = person_sprints * hours_per_sprint`, with
+  `hours_per_sprint = 80` from `data/resource_rules.json`.
+- Required effort (`person_sprints`/`estimated_hours` per phase/role) is
+  computed independently of staffing model; Lean, Balanced,
+  Specialized, and Customer-defined only change the `assigned_to`
+  combined-assignment view. Verified directly: total estimated hours
+  are identical across all four staffing models for the same phase
+  plan.
+- Resource warnings implemented in plain language: same-role allocation
+  above 100% in one phase, combined assigned-person allocation above
+  100% under the selected staffing model, incompatible role
+  combinations (Developer/Senior Developer as sole QA; AI-role
+  equivalents for Responsible AI/security review), missing deployment/
+  stabilization coverage, and missing independent AI evaluation
+  coverage.
+- QA participates during the `development` phase (before dedicated
+  testing) at a lower allocation and more heavily during the dedicated
+  testing phase; Business Analyst participates during discovery and
+  UAT support -- per `PHASE-RESOURCE-PLANNING.md` §4.
+- AI phases/roles/effort are added only when AI is enabled and are
+  entirely absent (not zeroed) when AI is off, per §12.2. The detailed
+  27-activity catalog drives the AI workstream when populated (the
+  optional/advanced section); when empty, a fallback mapping from the
+  simplified "AI help" answers is used instead, so an AI-enabled
+  estimate never gets an empty AI workstream. Baseline activities
+  (use-case definition, Responsible AI review) are always included
+  regardless, per `ESTIMATE-TYPES.md` §11.5.
+- AI-workstream phase durations use a new configurable prototype
+  assumption (`ai_phase_weight_of_core_duration`, 0.25 of the core IT
+  total, split evenly across triggered AI phases) -- not sourced from a
+  governed reference, flagged for business review.
+- The preliminary SOW outline (`sow_outline_engine.py`) gained one new
+  optional section, "Preliminary phase and resource plan," appended
+  only when a resource plan is supplied; existing calls/tests without
+  it are byte-for-byte unchanged (backward compatible). The new section
+  contains phases, roles, and hours only -- no rates, cost, price,
+  margin, contingency, or payment terms exist on `ResourcePlanResult`
+  to leak into it.
+- No rate card, default/scenario rate, blended rate, role/phase/
+  baseline cost, contingency, margin, discount, customer price, or
+  support pricing was introduced anywhere in this milestone's code.
+- The resource-plan editor (`st.data_editor`) allows duration to be
+  edited per row rather than once per phase, since a phase may have
+  multiple role rows -- a documented, deliberate simplification for the
+  single combined editable table this milestone's UI requires, not a
+  normalized two-table design.
+
+**Source:** EAP.M2, run from the live repository root, following
+approval of the pre-edit 10-point design report.

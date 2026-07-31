@@ -1,6 +1,12 @@
 import pytest
 
-from src.models import ComplexityDimensionAnswer, ContractFitResult, EstimateRequest, SizingResult
+from src.models import (
+    ComplexityDimensionAnswer,
+    ContractFitResult,
+    EstimateRequest,
+    ResourcePlanResult,
+    SizingResult,
+)
 from src.complexity_engine import calculate_weighted_complexity
 from src.sow_outline_engine import (
     MANDATORY_DISCLAIMER,
@@ -250,3 +256,94 @@ def test_no_unknown_items_shows_explicit_confirmation_not_omission():
     sections = _build_outline(request, unknown_scope_labels=[])
     section_map = dict(sections)
     assert "confirmed status" in section_map["Items requiring confirmation"]
+
+
+# --- EAP.M2: resource-plan integration --------------------------------------
+
+
+def _resource_plan():
+    from src.models import PhasePlanEntry, ResourcePlanRow
+
+    phases = [
+        PhasePlanEntry(phase_key="development", phase_label="Development or configuration", duration_sprints=2.0),
+    ]
+    rows = [
+        ResourcePlanRow(
+            phase_key="development", phase_label="Development or configuration", role="Developer",
+            allocation_percent=100, person_sprints=2.0, estimated_hours=160.0, assigned_to="Developer",
+        ),
+    ]
+    return ResourcePlanResult(
+        phases=phases, rows=rows, staffing_model="Balanced", warnings=["Example warning."],
+        total_hours_by_role={"Developer": 160.0}, total_hours_by_phase={"Development or configuration": 160.0},
+        total_hours_core_it=160.0, total_hours_ai_workstream=0.0,
+    )
+
+
+def test_outline_without_resource_plan_is_unchanged_20_sections():
+    request = _base_request()
+    sections = _build_outline(request)
+    assert len(sections) == 20  # AI off in _base_request default -> 20, matching pre-M2 behavior
+    assert "Preliminary phase and resource plan" not in [title for title, _ in sections]
+
+
+def test_outline_with_resource_plan_adds_one_section():
+    request = _base_request()
+    complexity = calculate_weighted_complexity({a.dimension_key: a.score for a in request.complexity_answers})
+    sizing = _sizing()
+    contract_fit = _contract_fit()
+    display_names = {
+        "functional": "Functional complexity", "technical": "Technical complexity",
+        "integration": "Integration complexity", "data": "Data complexity",
+        "testing": "Testing complexity", "dependency": "Dependency complexity",
+        "operational_risk": "Operational risk",
+    }
+    sections = build_preliminary_sow_outline(
+        estimate_request=request,
+        complexity_result=complexity,
+        sizing_result=sizing,
+        contract_fit_result=contract_fit,
+        work_type_label="Enhancement",
+        included_scope_labels=["User interface or frontend"],
+        excluded_scope_labels=["Reporting or analytics"],
+        unknown_scope_labels=["Documentation"],
+        dimension_display_names=display_names,
+        generated_at="2026-07-31",
+        resource_plan=_resource_plan(),
+    )
+    titles = [title for title, _ in sections]
+    assert titles.count("Preliminary phase and resource plan") == 1
+    assert titles[-1] == "Mandatory disclaimer"  # disclaimer always last
+    section_map = dict(sections)
+    resource_section = section_map["Preliminary phase and resource plan"]
+    assert "Developer" in resource_section
+    assert "160" in resource_section
+    assert "Example warning." in resource_section
+    assert "preliminary planning information only" in resource_section
+
+
+def test_resource_plan_section_never_contains_pricing_indicators():
+    request = _base_request()
+    complexity = calculate_weighted_complexity({a.dimension_key: a.score for a in request.complexity_answers})
+    sections = build_preliminary_sow_outline(
+        estimate_request=request,
+        complexity_result=complexity,
+        sizing_result=_sizing(),
+        contract_fit_result=_contract_fit(),
+        work_type_label="Enhancement",
+        included_scope_labels=[],
+        excluded_scope_labels=[],
+        unknown_scope_labels=[],
+        dimension_display_names={
+            "functional": "F", "technical": "T", "integration": "I", "data": "D",
+            "testing": "Te", "dependency": "De", "operational_risk": "O",
+        },
+        generated_at="2026-07-31",
+        resource_plan=_resource_plan(),
+    )
+    combined = " ".join(body for _, body in sections).lower()
+    for forbidden in (
+        "$", "hourly rate", "blended rate", "scenario rate", "default rate", "role cost",
+        "cost", "margin", "contingency", "price", "payment",
+    ):
+        assert forbidden not in combined

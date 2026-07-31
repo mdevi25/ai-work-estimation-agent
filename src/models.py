@@ -209,6 +209,52 @@ class ContractFitResult(BaseModel):
     status_explanation: str
 
 
+StaffingModel = Literal["Lean", "Balanced", "Specialized", "Customer-defined"]
+
+
+class PhasePlanEntry(BaseModel):
+    """One phase's duration. See phase_planner.py. No role or hour data here."""
+
+    phase_key: str
+    phase_label: str
+    duration_sprints: float = Field(ge=0)
+    is_ai_workstream: bool = False
+
+
+class ResourcePlanRow(BaseModel):
+    """Required role effort for one phase. See resource_planner.py.
+
+    `assigned_to` reflects the selected staffing model's combined-assignment
+    view only -- it never changes `allocation_percent`, `person_sprints`, or
+    `estimated_hours`, which are the required effort and stay constant
+    regardless of staffing model (PHASE-RESOURCE-PLANNING.md section 5).
+    """
+
+    phase_key: str
+    phase_label: str
+    role: str
+    allocation_percent: float = Field(ge=0)
+    person_sprints: float
+    estimated_hours: float
+    is_ai_workstream: bool = False
+    assigned_to: Optional[str] = None
+
+
+class ResourcePlanResult(BaseModel):
+    """Deterministic phase/resource plan output. See phase_planner.py and
+    resource_planner.py. No rates, cost, or price anywhere in this model.
+    """
+
+    phases: list[PhasePlanEntry]
+    rows: list[ResourcePlanRow]
+    staffing_model: StaffingModel
+    warnings: list[str] = Field(default_factory=list)
+    total_hours_by_role: dict[str, float] = Field(default_factory=dict)
+    total_hours_by_phase: dict[str, float] = Field(default_factory=dict)
+    total_hours_core_it: float = 0.0
+    total_hours_ai_workstream: float = 0.0
+
+
 class ResponsibleAIGateResult(BaseModel):
     """Result of the lightweight pre-generation gate in sow_outline_engine.py.
 

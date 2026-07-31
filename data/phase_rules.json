@@ -1,0 +1,35 @@
+{
+  "phases_by_work_type": {
+    "new_project": [
+      {"key": "discovery_and_requirements", "label": "Discovery and requirements", "weight": 0.15},
+      {"key": "solution_design", "label": "Solution design", "weight": 0.15},
+      {"key": "development", "label": "Development or configuration", "weight": 0.35},
+      {"key": "system_regression_testing", "label": "System and regression testing", "weight": 0.15},
+      {"key": "uat_support", "label": "UAT support", "weight": 0.10},
+      {"key": "deployment", "label": "Deployment", "weight": 0.05},
+      {"key": "stabilization", "label": "Stabilization", "weight": 0.05}
+    ],
+    "enhancement": [
+      {"key": "discovery_and_requirements", "label": "Discovery and requirements", "weight": 0.15},
+      {"key": "solution_design", "label": "Solution design", "weight": 0.15},
+      {"key": "development", "label": "Development or configuration", "weight": 0.35},
+      {"key": "regression_testing", "label": "Regression testing", "weight": 0.20},
+      {"key": "uat_support", "label": "UAT support", "weight": 0.10},
+      {"key": "deployment", "label": "Deployment", "weight": 0.05}
+    ],
+    "production_support": [
+      {"key": "investigation", "label": "Investigation and diagnosis", "weight": 0.30},
+      {"key": "remediation_design", "label": "Remediation design", "weight": 0.15},
+      {"key": "development", "label": "Development or configuration", "weight": 0.30},
+      {"key": "regression_testing", "label": "Regression testing", "weight": 0.15},
+      {"key": "deployment", "label": "Deployment", "weight": 0.10}
+    ]
+  },
+  "ai_phases": [
+    {"key": "ai_discovery_and_design", "label": "AI discovery and design"},
+    {"key": "ai_development_and_integration", "label": "AI development and integration"},
+    {"key": "ai_evaluation_and_testing", "label": "AI evaluation and testing"},
+    {"key": "ai_monitoring_and_governance", "label": "AI monitoring and governance"}
+  ],
+  "ai_phase_weight_of_core_duration": 0.25
+}
