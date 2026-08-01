@@ -22,9 +22,21 @@ from src.assumption_engine import generate_assumptions
 from src.complexity_engine import calculate_weighted_complexity, load_complexity_questions
 from src.config import ConfigurationError, load_json_config
 from src.contract_fit import calculate_contract_fit, sprint_to_months
-from src.models import COMPLEXITY_DIMENSION_KEYS, ComplexityDimensionAnswer, EstimateRequest, ResourcePlanRow
+from src.models import SCENARIO_IDS, COMPLEXITY_DIMENSION_KEYS, ComplexityDimensionAnswer, EstimateRequest, ResourcePlanRow
 from src.phase_planner import build_phase_plan
-from src.pricing_engine import build_baseline_cost, reconcile_rate_state, reset_all_rates, reset_role_rate
+from src.pricing_engine import (
+    approve_scenario,
+    build_baseline_cost,
+    build_default_scenarios,
+    derive_delivery_risk_warnings,
+    load_commercial_pricing_defaults,
+    recalculate_scenario,
+    reconcile_rate_state,
+    refresh_scenario_staleness,
+    reset_all_rates,
+    reset_role_rate,
+    reset_scenario_to_default,
+)
 from src.resource_planner import build_resource_plan, load_resource_rules
 from src.running_estimate_preview import compute_preliminary_view
 from src.scope_defaults import (
@@ -97,6 +109,8 @@ DEFAULTS = {
     "scenario_rates": {},
     "rate_override_reasons": {},
     "baseline_cost_result": None,
+    "commercial_scenarios": None,
+    "approved_scenario_id": None,
 }
 
 
@@ -887,6 +901,7 @@ def _generate_sow_outline() -> None:
         generated_at=st.session_state["sow_outline_generated_at"],
         resource_plan=st.session_state["resource_plan_result"],
         baseline_costing_in_progress=st.session_state["baseline_cost_result"] is not None,
+        approved_commercial_scenario_name=_approved_scenario_name(),
     )
 
 
@@ -927,6 +942,9 @@ def _render_action_navigation() -> None:
 
     if st.session_state["resource_plan_result"] is not None:
         _render_baseline_cost_section()
+
+    if st.session_state["baseline_cost_result"] is not None:
+        _render_commercial_pricing_section()
 
     if st.session_state["sow_outline_gate"] is not None:
         _render_sow_outline_section()
@@ -1290,6 +1308,314 @@ def _render_baseline_cost_section() -> None:
                 f"- **{row.role}**: {row.total_estimated_hours:g} hours × {row.scenario_rate:,.2f} = "
                 f"{row.role_cost:,.2f}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Commercial scenario pricing and approval (EAP.M4)
+# ---------------------------------------------------------------------------
+
+
+def _ensure_commercial_scenarios() -> None:
+    if st.session_state["commercial_scenarios"] is None:
+        defaults = load_commercial_pricing_defaults()
+        st.session_state["commercial_scenarios"] = build_default_scenarios(defaults)
+        _recalculate_all_commercial_scenarios()
+
+
+def _delivery_warnings_present() -> bool:
+    plan = st.session_state["resource_plan_result"]
+    return bool(plan.warnings) if plan is not None else False
+
+
+def _commercial_warnings_present() -> bool:
+    cost_result = st.session_state["baseline_cost_result"]
+    return bool(cost_result.commercial_warnings) if cost_result is not None else False
+
+
+def _approved_scenario_name() -> str | None:
+    approved_id = st.session_state["approved_scenario_id"]
+    scenarios = st.session_state["commercial_scenarios"]
+    if not approved_id or not scenarios:
+        return None
+    return scenarios[approved_id].scenario_name
+
+
+def _recalculate_commercial_scenario(scenario_id: str) -> None:
+    defaults = load_commercial_pricing_defaults()
+    scenarios = st.session_state["commercial_scenarios"]
+    recommended = scenarios["recommended"]
+    results = st.session_state["results"]
+
+    scenarios[scenario_id] = recalculate_scenario(
+        scenarios[scenario_id],
+        baseline_cost_result=st.session_state["baseline_cost_result"],
+        defaults=defaults,
+        rates_overridden=bool(st.session_state["scenario_rates"]),
+        delivery_warnings_present=_delivery_warnings_present(),
+        ai_enabled=estimate_request_ai_enabled(),
+        staffing_model=st.session_state["staffing_model"],
+        unresolved_items_present=bool(results["estimate_request"].items_needing_review) if results else False,
+        recommended_contingency_percentage=recommended.contingency_percentage,
+        recommended_target_margin_percentage=recommended.target_margin_percentage,
+        is_currently_approved=(st.session_state["approved_scenario_id"] == scenario_id),
+    )
+    st.session_state["commercial_scenarios"] = scenarios
+
+
+def _recalculate_all_commercial_scenarios() -> None:
+    for scenario_id in SCENARIO_IDS:
+        _recalculate_commercial_scenario(scenario_id)
+
+
+def _render_scenario_comparison_table() -> None:
+    scenarios = st.session_state["commercial_scenarios"]
+    rows = []
+    for scenario_id in SCENARIO_IDS:
+        s = scenarios[scenario_id]
+        stale = " (stale)" if s.needs_recalculation else ""
+        rows.append(
+            {
+                "Scenario": s.scenario_name,
+                "Contingency %": f"{s.contingency_percentage:.2%}",
+                "Target margin %": f"{s.target_margin_percentage:.2%}",
+                "Customer price": f"{s.customer_price:,.2f}{stale}" if s.customer_price is not None else "N/A",
+                "Gross profit": f"{s.gross_profit:,.2f}" if s.gross_profit is not None else "N/A",
+                "Achieved margin": f"{s.achieved_margin:.2%}" if s.achieved_margin is not None else "N/A",
+                "Equivalent markup": f"{s.equivalent_markup:.2%}" if s.equivalent_markup is not None else "N/A",
+                "Commercial readiness": s.readiness_status,
+                "Approval status": s.approval_status,
+            }
+        )
+    st.dataframe(pd.DataFrame(rows), hide_index=True)
+
+
+def _render_scenario_card(scenario_id: str) -> None:
+    defaults = load_commercial_pricing_defaults()
+    scenario = st.session_state["commercial_scenarios"][scenario_id]
+    is_approved = st.session_state["approved_scenario_id"] == scenario_id
+    badge = " -- Approved" if is_approved else ""
+
+    with st.expander(f"{scenario.scenario_name}{badge}", expanded=(scenario_id == "recommended")):
+        if scenario.stale_reason:
+            st.warning(scenario.stale_reason)
+
+        if scenario_id == "custom":
+            new_name = st.text_input(
+                "Scenario name", value=scenario.scenario_name, key=f"w_scenario_name_{scenario_id}"
+            )
+            new_description = st.text_area(
+                "Scenario description", value=scenario.scenario_description, key=f"w_scenario_desc_{scenario_id}"
+            )
+        else:
+            st.caption(scenario.scenario_description)
+            new_name = scenario.scenario_name
+            new_description = scenario.scenario_description
+
+        cols = st.columns(2)
+        with cols[0]:
+            new_contingency_pct = st.number_input(
+                "Contingency %",
+                min_value=0.0,
+                max_value=defaults["max_contingency_percentage"] * 100,
+                value=scenario.contingency_percentage * 100,
+                step=1.0,
+                key=f"w_contingency_{scenario_id}",
+            )
+        with cols[1]:
+            new_margin_pct = st.number_input(
+                "Target margin %",
+                min_value=0.0,
+                max_value=99.0,
+                value=scenario.target_margin_percentage * 100,
+                step=1.0,
+                key=f"w_margin_{scenario_id}",
+            )
+
+        new_contingency = new_contingency_pct / 100
+        new_margin = new_margin_pct / 100
+        inputs_changed = (
+            new_name != scenario.scenario_name
+            or new_description != scenario.scenario_description
+            or new_contingency != scenario.contingency_percentage
+            or new_margin != scenario.target_margin_percentage
+        )
+        if inputs_changed:
+            st.session_state["commercial_scenarios"][scenario_id] = scenario.model_copy(
+                update={
+                    "scenario_name": new_name,
+                    "scenario_description": new_description,
+                    "contingency_percentage": new_contingency,
+                    "target_margin_percentage": new_margin,
+                    "needs_recalculation": True,
+                    "stale_reason": None,
+                }
+            )
+            _recalculate_commercial_scenario(scenario_id)
+            st.rerun()
+
+        action_cols = st.columns(2)
+        with action_cols[0]:
+            if st.button("Recalculate this scenario", key=f"recalc_{scenario_id}"):
+                _recalculate_commercial_scenario(scenario_id)
+                st.rerun()
+        with action_cols[1]:
+            if st.button("Reset to governed defaults", key=f"reset_scenario_{scenario_id}"):
+                st.session_state["commercial_scenarios"][scenario_id] = reset_scenario_to_default(
+                    scenario, defaults
+                )
+                _recalculate_commercial_scenario(scenario_id)
+                st.rerun()
+
+        scenario = st.session_state["commercial_scenarios"][scenario_id]
+        stale_note = " _(stale -- recalculate to update)_" if scenario.needs_recalculation else ""
+
+        st.markdown(f"**Commercial readiness:** {scenario.readiness_status}")
+        st.markdown(f"**Approval status:** {scenario.approval_status}")
+        if scenario.customer_price is not None:
+            st.markdown(f"- Contingency amount: {scenario.contingency_amount:,.2f}{stale_note}")
+            st.markdown(f"- Risk-adjusted delivery cost: {scenario.risk_adjusted_delivery_cost:,.2f}{stale_note}")
+            st.markdown(f"- Customer price: {scenario.customer_price:,.2f}{stale_note}")
+            st.markdown(f"- Gross profit: {scenario.gross_profit:,.2f}{stale_note}")
+            margin_display = f"{scenario.achieved_margin:.2%}" if scenario.achieved_margin is not None else "N/A"
+            markup_display = f"{scenario.equivalent_markup:.2%}" if scenario.equivalent_markup is not None else "N/A"
+            st.markdown(f"- Achieved margin: {margin_display}{stale_note}")
+            st.markdown(f"- Equivalent markup: {markup_display}{stale_note}")
+
+        for reason in scenario.blocking_conditions:
+            st.error(reason)
+        for reason in scenario.validation_warnings:
+            st.warning(reason)
+
+        delivery_warnings = derive_delivery_risk_warnings(
+            st.session_state["resource_plan_result"].warnings if st.session_state["resource_plan_result"] else []
+        )
+        for warning in delivery_warnings:
+            st.warning(warning)
+
+        cost_result = st.session_state["baseline_cost_result"]
+        commercial_warnings = cost_result.commercial_warnings if cost_result else []
+        for warning in commercial_warnings:
+            st.warning(warning)
+            if scenario.gross_profit is not None:
+                margin_note = f" Resulting achieved margin: {scenario.achieved_margin:.2%}." if scenario.achieved_margin is not None else ""
+                st.caption(f"Resulting gross profit for this scenario: {scenario.gross_profit:,.2f}.{margin_note}")
+
+        st.markdown("#### Approval")
+        approval_reason = st.text_area(
+            "Approval note (required to approve)",
+            value=scenario.approval_reason or "",
+            key=f"w_approval_reason_{scenario_id}",
+        )
+        delivery_ack = scenario.delivery_warnings_acknowledged
+        commercial_ack = scenario.commercial_warnings_acknowledged
+        if delivery_warnings:
+            delivery_ack = st.checkbox(
+                "I acknowledge the delivery-risk warning(s) above",
+                value=scenario.delivery_warnings_acknowledged,
+                key=f"w_delivery_ack_{scenario_id}",
+            )
+        if commercial_warnings:
+            commercial_ack = st.checkbox(
+                "I acknowledge the commercial-risk warning(s) above",
+                value=scenario.commercial_warnings_acknowledged,
+                key=f"w_commercial_ack_{scenario_id}",
+            )
+
+        scenario = scenario.model_copy(
+            update={
+                "approval_reason": approval_reason or None,
+                "delivery_warnings_acknowledged": delivery_ack,
+                "commercial_warnings_acknowledged": commercial_ack,
+            }
+        )
+        st.session_state["commercial_scenarios"][scenario_id] = scenario
+
+        if is_approved:
+            if st.button("Remove approval from this scenario", key=f"unapprove_{scenario_id}"):
+                st.session_state["approved_scenario_id"] = None
+                _recalculate_all_commercial_scenarios()
+                st.rerun()
+        else:
+            can_approve, blocking_reasons = approve_scenario(
+                scenario,
+                delivery_warnings_present=bool(delivery_warnings),
+                commercial_warnings_present=bool(commercial_warnings),
+            )
+            approve_label = (
+                "Approve this scenario"
+                if st.session_state["approved_scenario_id"] is None
+                else "Replace approval with this scenario"
+            )
+            if st.button(approve_label, key=f"approve_{scenario_id}", disabled=not can_approve) and can_approve:
+                st.session_state["approved_scenario_id"] = scenario_id
+                _recalculate_all_commercial_scenarios()
+                st.rerun()
+            if not can_approve:
+                with st.expander("Why can't I approve this scenario yet?"):
+                    for reason in blocking_reasons:
+                        st.markdown(f"- {reason}")
+
+        with st.expander("How was customer price calculated?"):
+            st.markdown("contingency_amount = baseline_delivery_cost × contingency_percentage")
+            st.markdown("risk_adjusted_delivery_cost = baseline_delivery_cost + contingency_amount")
+            st.markdown("customer_price = risk_adjusted_delivery_cost ÷ (1 − target_margin_percentage)")
+            st.markdown("gross_profit = customer_price − risk_adjusted_delivery_cost")
+            st.markdown("achieved_margin = gross_profit ÷ customer_price")
+            st.markdown("equivalent_markup = (customer_price − risk_adjusted_delivery_cost) ÷ risk_adjusted_delivery_cost")
+            if scenario.baseline_delivery_cost_used is not None and scenario.customer_price is not None:
+                st.markdown(
+                    f"Substituted: ({scenario.baseline_delivery_cost_used:,.2f} × "
+                    f"{scenario.contingency_percentage:.0%}) = {scenario.contingency_amount:,.2f} contingency; "
+                    f"{scenario.baseline_delivery_cost_used:,.2f} + {scenario.contingency_amount:,.2f} = "
+                    f"{scenario.risk_adjusted_delivery_cost:,.2f} risk-adjusted cost; "
+                    f"{scenario.risk_adjusted_delivery_cost:,.2f} ÷ (1 − {scenario.target_margin_percentage:.0%}) = "
+                    f"{scenario.customer_price:,.2f} customer price"
+                )
+                recommended = st.session_state["commercial_scenarios"]["recommended"]
+                if scenario_id != "recommended" and recommended.customer_price is not None:
+                    st.markdown(
+                        "Difference from Recommended: "
+                        f"{scenario.customer_price - recommended.customer_price:,.2f}"
+                    )
+                st.markdown(
+                    "Difference from baseline delivery cost: "
+                    f"{scenario.customer_price - scenario.baseline_delivery_cost_used:,.2f}"
+                )
+
+
+def _render_commercial_pricing_section() -> None:
+    st.divider()
+    st.markdown("## Commercial pricing")
+    st.caption(
+        "Internal-only commercial scenarios. Customer price, gross profit, achieved margin, and "
+        "equivalent markup are never customer-facing. No discount, rounding, or management-"
+        "adjustment lever exists in this milestone -- customer price is the direct result of "
+        "contingency and target margin only."
+    )
+
+    _ensure_commercial_scenarios()
+    scenarios, new_approved_id = refresh_scenario_staleness(
+        st.session_state["commercial_scenarios"],
+        st.session_state["baseline_cost_result"],
+        st.session_state["approved_scenario_id"],
+    )
+    if new_approved_id != st.session_state["approved_scenario_id"]:
+        st.warning(
+            "Commercial approval was removed because the baseline delivery cost changed since "
+            "approval. Recalculate the affected scenario before approving again."
+        )
+    st.session_state["commercial_scenarios"] = scenarios
+    st.session_state["approved_scenario_id"] = new_approved_id
+
+    if st.button("Recalculate all scenarios from the current baseline", key="recalculate_all_scenarios"):
+        _recalculate_all_commercial_scenarios()
+        st.rerun()
+
+    st.markdown("### Scenario comparison")
+    _render_scenario_comparison_table()
+
+    for scenario_id in SCENARIO_IDS:
+        _render_scenario_card(scenario_id)
 
 
 def _render_sow_outline_section() -> None:

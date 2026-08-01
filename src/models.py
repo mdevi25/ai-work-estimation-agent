@@ -1,11 +1,4 @@
-"""Structured data models shared across engines. No business calculations here.
-
-The two preview-only models at the bottom of this file
-(`RoleRatePreviewRow`, `RoleRatePreviewSet`) are additive UI scaffolding for
-a future pricing interaction (MVP.M3/M4). They are never consumed by
-`EstimateRequest`, any engine, or any customer-facing output in this
-milestone -- see docs/architecture.md for the boundary.
-"""
+"""Structured data models shared across engines. No business calculations here."""
 from __future__ import annotations
 
 from typing import Literal, Optional
@@ -321,3 +314,65 @@ class BaselineCostResult(BaseModel):
     readiness_status: PricingReadinessStatus
     readiness_reasons: list[str] = Field(default_factory=list)
     commercial_warnings: list[str] = Field(default_factory=list)
+
+
+# MVP.M4 -- commercial scenario pricing and approval.
+
+SCENARIO_IDS = ("recommended", "competitive", "conservative", "custom")
+
+ScenarioApprovalStatus = Literal["Draft", "Review Required", "Approved", "Approval Blocked"]
+CommercialReadinessStatus = Literal["Ready for Commercial Review", "Human Review Required", "Approval Blocked"]
+
+
+class PricingScenario(BaseModel):
+    """One commercial quote scenario (MVP.M4), derived from the current
+    governed M3 `BaselineCostResult.baseline_delivery_cost`. See
+    pricing_engine.py for the formulas. No discount, rounding, or
+    management-adjustment lever exists in this milestone -- `customer_price`
+    is the direct output of contingency and target margin only, per
+    EAP.M4-D1.
+
+    `baseline_delivery_cost_used`/`baseline_readiness_status_used` are a
+    snapshot of the M3 baseline this scenario's dollar fields were last
+    calculated against. Compared each render to the live baseline to detect
+    drift (EAP.M4-D1 item 8) -- a mismatch clears approval and sets
+    `needs_recalculation`/`stale_reason` without silently recomputing the
+    scenario's stored dollar fields.
+
+    `readiness_status` (calculation cleanliness) and `approval_status`
+    (human decision state) are deliberately independent axes -- a scenario
+    may be "Ready for Commercial Review" and still "Draft" (EAP.M4-D1
+    item 5).
+    """
+
+    scenario_id: str
+    scenario_name: str
+    scenario_description: str
+
+    contingency_percentage: float = Field(ge=0)
+    target_margin_percentage: float = Field(ge=0, lt=1)
+
+    baseline_delivery_cost_used: Optional[float] = None
+    baseline_readiness_status_used: Optional[str] = None
+
+    contingency_amount: Optional[float] = None
+    risk_adjusted_delivery_cost: Optional[float] = None
+    customer_price: Optional[float] = None
+    gross_profit: Optional[float] = None
+    achieved_margin: Optional[float] = None
+    equivalent_markup: Optional[float] = None
+
+    readiness_status: CommercialReadinessStatus = "Human Review Required"
+    approval_status: ScenarioApprovalStatus = "Draft"
+    approval_reason: Optional[str] = None
+    delivery_warnings_acknowledged: bool = False
+    commercial_warnings_acknowledged: bool = False
+
+    created_at: Optional[str] = None
+    recalculated_at: Optional[str] = None
+
+    needs_recalculation: bool = True
+    stale_reason: Optional[str] = None
+
+    validation_warnings: list[str] = Field(default_factory=list)
+    blocking_conditions: list[str] = Field(default_factory=list)

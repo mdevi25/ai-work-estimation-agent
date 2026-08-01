@@ -1,5 +1,5 @@
 ---
-title: AI Work Estimation and Pricing Assistant -- MVP.M1-M3 (Current State)
+title: AI Work Estimation and Pricing Assistant -- MVP.M1-M4 (Current State)
 ---
 flowchart TD
     User["Nontechnical business user"]
@@ -21,6 +21,7 @@ flowchart TD
         EstimateRequest["EstimateRequest\n(assembled at Review step)"]
         ResourcePlanResult["ResourcePlanResult\n(phases/roles/hours, no cost)"]
         BaselineCostResult["BaselineCostResult\n(role cost, blended rate,\nreadiness status -- no margin/price)"]
+        PricingScenario["PricingScenario x4\n(contingency, margin, customer price,\ngross profit, margin, markup,\nreadiness + approval status)"]
     end
 
     subgraph Engines["Authoritative engine layer -- src/"]
@@ -29,7 +30,7 @@ flowchart TD
         ContractFit["contract_fit.py\ncontract-fit status\n(unchanged since MVP.M1)"]
         PhasePlanner["phase_planner.py\nphases + durations\n(unchanged since MVP.M2)"]
         ResourcePlanner["resource_planner.py\nroles, person-sprints, hours,\nstaffing views, warnings\n(unchanged since MVP.M2)"]
-        PricingEngine["pricing_engine.py (MVP.M3)\nrole cost, baseline delivery cost,\nblended rate, readiness status"]
+        PricingEngine["pricing_engine.py\nMVP.M3: role cost, baseline delivery cost,\nblended rate, readiness status\nMVP.M4: contingency -> customer price,\ngross profit, margin, markup,\napproval gate, drift detection"]
     end
 
     subgraph Config["Configuration -- data/ (governed JSON + CSV)"]
@@ -43,14 +44,15 @@ flowchart TD
         ResourceRules["resource_rules.json"]
         RoleCombos["role_combinations.json"]
         RateCard["rate_card.csv\n(illustrative/fictional rates only)"]
+        CommercialDefaults["commercial_pricing_defaults.json\n(4 scenario defaults, max contingency,\nmaterial-difference thresholds --\nflagged prototype values)"]
         SowTemplates["sow_outline_templates.json"]
     end
 
     HumanReview["Human review point\n(Review step -- Step 5,\nrequired before calculation runs)"]
     ReadinessReview["Human review point\n(pricing-readiness status:\nBlocked > Human Review > Ready)"]
+    ApprovalGate["Human review point\n(commercial approval: note +\nwarning acknowledgement required;\nexactly one Approved scenario)"]
 
     subgraph FutureScope["Not implemented -- deferred"]
-        CommercialPricing["Commercial pricing: contingency,\nmargin, gross profit, customer price\n(MVP.M4)"]
         SupportEstimation["Support estimation\n(MVP.M5)"]
         FinalSow["Governed final SOW, Excel/PowerPoint\nexport (MVP.M6)"]
         AIAdapter["Estimator's own AI-assisted intake\n(MVP.M7, replaceable interface)"]
@@ -94,19 +96,26 @@ flowchart TD
     BaselineCostResult -->|editable scenario-rate table\n+ totals + warnings| Actions
     BaselineCostResult --> ReadinessReview
 
+    BaselineCostResult -->|baseline_delivery_cost| PricingEngine
+    PricingEngine -->|reads| CommercialDefaults
+    PricingEngine --> PricingScenario
+    PricingScenario -->|comparison table + per-scenario\ncards, edit/reset/recalculate| Actions
+    PricingScenario --> ApprovalGate
+    BaselineCostResult -.->|drift detection clears\napproval automatically| PricingScenario
+
     Actions -->|"Generate Preliminary SOW Outline"| SowOutline
     SowOutline -->|reads| SowTemplates
     EstimateRequest --> SowOutline
     ResourcePlanResult -->|phases/roles/hours only| SowOutline
     BaselineCostResult -.->|boolean status signal only,\nnever an amount| SowOutline
+    PricingScenario -.->|approved scenario NAME only,\nnever an amount| SowOutline
     SowOutline -->|"Preliminary Draft" outline| Actions
     Actions -->|displays| User
 
-    Wizard -.->|not built yet| CommercialPricing
-    BaselineCostResult -.->|feeds MVP.M4| CommercialPricing
-    CommercialPricing -.->|not built yet| SupportEstimation
+    PricingScenario -.->|feeds MVP.M6's ApprovedEstimate\n(not built yet)| FinalSow
+    Wizard -.->|not built yet| SupportEstimation
     SupportEstimation -.->|not built yet| FinalSow
     Wizard -.->|not built yet| AIAdapter
 
     classDef future stroke-dasharray: 5 5,opacity:0.6;
-    class CommercialPricing,SupportEstimation,FinalSow,AIAdapter future;
+    class SupportEstimation,FinalSow,AIAdapter future;

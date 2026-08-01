@@ -383,3 +383,64 @@ def test_baseline_costing_in_progress_true_adds_status_sentence_only():
     combined = " ".join(body for _, body in sections).lower()
     for forbidden in ("$", "hourly rate", "blended rate", "role cost", "margin", "override reason"):
         assert forbidden not in combined
+
+
+# --- EAP.M4: approved-scenario name-only signal -----------------------------
+
+
+def test_no_approved_scenario_name_by_default_no_extra_text():
+    request = _base_request()
+    sections = _build_outline(request)
+    section_map = dict(sections)
+    assert "commercial terms are subject to final review" not in section_map["Document status"].lower()
+    assert "approved commercial scenario" not in section_map["Document status"].lower()
+
+
+def test_approved_scenario_name_adds_name_and_status_sentence_only_no_amounts():
+    request = _base_request()
+    complexity = calculate_weighted_complexity({a.dimension_key: a.score for a in request.complexity_answers})
+    sections = build_preliminary_sow_outline(
+        estimate_request=request,
+        complexity_result=complexity,
+        sizing_result=_sizing(),
+        contract_fit_result=_contract_fit(),
+        work_type_label="Enhancement",
+        included_scope_labels=[],
+        excluded_scope_labels=[],
+        unknown_scope_labels=[],
+        dimension_display_names={
+            "functional": "F", "technical": "T", "integration": "I", "data": "D",
+            "testing": "Te", "dependency": "De", "operational_risk": "O",
+        },
+        generated_at="2026-07-31",
+        approved_commercial_scenario_name="Recommended",
+    )
+    section_map = dict(sections)
+    assert "Approved commercial scenario: Recommended." in section_map["Document status"]
+    assert "Commercial terms are subject to final review." in section_map["Document status"]
+    combined = " ".join(body for _, body in sections).lower()
+    for forbidden in (
+        "$", "customer price", "baseline delivery cost", "contingency", "gross profit",
+        "margin", "markup", "hourly rate", "blended rate", "role cost", "override reason",
+        "approval note",
+    ):
+        assert forbidden not in combined
+
+
+def test_sow_outline_engine_never_imports_pricing_scenario_model():
+    import ast
+
+    import src.sow_outline_engine as module
+
+    with open(module.__file__, "r", encoding="utf-8") as handle:
+        tree = ast.parse(handle.read())
+
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            imported_names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            imported_names.update(alias.name for alias in node.names)
+
+    for forbidden in ("PricingScenario", "BaselineCostResult", "RoleCostRow", "RateCardEntry"):
+        assert forbidden not in imported_names

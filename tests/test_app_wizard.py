@@ -588,3 +588,201 @@ def test_baseline_cost_feeds_status_only_into_sow_outline_no_amounts():
     sow_section = body.split("Preliminary SOW Outline", 1)[-1]
     for forbidden in ("Baseline delivery cost", "Blended hourly rate", "Role cost", "Scenario rate"):
         assert forbidden not in sow_section
+
+
+# --- EAP.M4: commercial scenario pricing and approval ------------------------
+
+
+def _clean_scope_state(at: AppTest) -> None:
+    at.session_state["scope_checklist"] = {
+        k: ("included" if v == "unknown" else v) for k, v in at.session_state["scope_checklist"].items()
+    }
+
+
+def test_commercial_pricing_section_renders_after_baseline_cost():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    assert list(at.exception) == []
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Commercial pricing" in body
+
+
+def test_commercial_pricing_not_shown_before_baseline_cost_exists():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Commercial pricing" not in body
+
+
+def test_four_governed_scenarios_present_and_calculated_immediately():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _generate_results(at)
+    _build_resource_plan(at)
+    scenarios = at.session_state["commercial_scenarios"]
+    assert set(scenarios.keys()) == {"recommended", "competitive", "conservative", "custom"}
+    for scenario in scenarios.values():
+        assert scenario.needs_recalculation is False
+        assert scenario.customer_price is not None
+
+
+def test_recommended_ready_when_no_review_triggers():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    scenarios = at.session_state["commercial_scenarios"]
+    assert scenarios["recommended"].readiness_status == "Ready for Commercial Review"
+    assert scenarios["recommended"].approval_status == "Draft"
+
+
+def test_competitive_always_human_review_required():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    scenarios = at.session_state["commercial_scenarios"]
+    assert scenarios["competitive"].readiness_status == "Human Review Required"
+
+
+def test_approve_without_note_is_blocked_and_button_disabled():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    assert at.button(key="approve_recommended").disabled is True
+    at.button(key="approve_recommended").click()
+    at.run()
+    assert at.session_state["approved_scenario_id"] is None
+
+
+def test_approve_with_note_succeeds():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.text_area(key="w_approval_reason_recommended").set_value("Approved for pilot").run()
+    at.button(key="approve_recommended").click()
+    at.run()
+    assert at.session_state["approved_scenario_id"] == "recommended"
+    assert at.session_state["commercial_scenarios"]["recommended"].approval_status == "Approved"
+
+
+def test_replacing_approval_preserves_previous_scenario_calculations():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.text_area(key="w_approval_reason_recommended").set_value("Approved for pilot").run()
+    at.button(key="approve_recommended").click()
+    at.run()
+    price_before = at.session_state["commercial_scenarios"]["recommended"].customer_price
+
+    at.text_area(key="w_approval_reason_competitive").set_value("Switching to competitive").run()
+    at.button(key="approve_competitive").click()
+    at.run()
+
+    assert at.session_state["approved_scenario_id"] == "competitive"
+    recommended_after = at.session_state["commercial_scenarios"]["recommended"]
+    assert recommended_after.approval_status != "Approved"
+    assert recommended_after.customer_price == pytest.approx(price_before)
+
+
+def test_exactly_one_scenario_approved_at_a_time():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.text_area(key="w_approval_reason_recommended").set_value("Approved").run()
+    at.button(key="approve_recommended").click()
+    at.run()
+    approved = [s for s in at.session_state["commercial_scenarios"].values() if s.approval_status == "Approved"]
+    assert len(approved) == 1
+
+
+def test_approval_invalidated_when_role_rate_changes_baseline():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.text_area(key="w_approval_reason_recommended").set_value("Approved").run()
+    at.button(key="approve_recommended").click()
+    at.run()
+    assert at.session_state["approved_scenario_id"] == "recommended"
+
+    cost_result = at.session_state["baseline_cost_result"]
+    role = cost_result.rows[0].role
+    new_rate = (cost_result.rows[0].configured_default_rate or 0) + 25
+    at.session_state["scenario_rates"][role] = new_rate
+    at.session_state["rate_override_reasons"][role] = "Negotiated rate"
+    at.run()
+
+    assert at.session_state["approved_scenario_id"] is None
+    assert at.session_state["commercial_scenarios"]["recommended"].needs_recalculation is True
+    assert at.session_state["commercial_scenarios"]["recommended"].stale_reason is not None
+
+
+def test_ai_on_triggers_human_review_for_recommended():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    at.session_state["ai_included"] = "Yes"
+    at.session_state["ai_help"] = ["Generate content"]
+    at.session_state["ai_data"] = "Internal business information"
+    at.session_state["ai_human_review"] = "Always"
+    _generate_results(at)
+    _build_resource_plan(at)
+    scenarios = at.session_state["commercial_scenarios"]
+    assert scenarios["recommended"].readiness_status == "Human Review Required"
+
+
+def test_commercial_pricing_feeds_only_approved_name_into_sow_no_amounts():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    at.text_area(key="w_approval_reason_recommended").set_value("Approved for pilot").run()
+    at.button(key="approve_recommended").click()
+    at.run()
+    at.button(key="generate_sow_outline").click()
+    at.run()
+
+    body = "\n".join(m.value for m in at.markdown)
+    assert "Commercial terms are subject to final review." in body
+    sow_section = body.split("Preliminary SOW Outline", 1)[-1]
+    assert "Approved commercial scenario: Recommended." in sow_section
+    for forbidden in ("Customer price", "Gross profit", "Achieved margin", "Equivalent markup", "Contingency amount"):
+        assert forbidden not in sow_section
+
+
+def test_no_discount_rounding_or_management_adjustment_controls_in_ui():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    body = "\n".join(m.value for m in at.markdown).lower()
+    commercial_section = body.split("## commercial pricing", 1)[-1]
+    for forbidden in ("discount", "rounding", "management adjustment", "coupon", "promotional"):
+        assert forbidden not in commercial_section
+
+
+def test_sidebar_intact_with_commercial_pricing_section_present():
+    at = AppTest.from_file("app.py")
+    _seed_complete_state(at, step=5)
+    _clean_scope_state(at)
+    _generate_results(at)
+    _build_resource_plan(at)
+    sidebar_text = "\n".join(m.value for m in at.sidebar.markdown)
+    assert "Governed estimate" in sidebar_text

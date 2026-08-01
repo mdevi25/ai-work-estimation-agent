@@ -23,12 +23,13 @@ application directly.
 
 This document covers what is implemented through **MVP.M1 —
 Estimation foundation** (remediated by **EAP.M1.UI1** and
-**EAP.M1.UI2**), **MVP.M2 — Phase and Resource Planning**, and
-**MVP.M3 — Baseline Cost and Role Rate Card**: a guided, self-service
-5-step Streamlit wizard (`app.py`) with a persistent left-side panel,
-that captures estimate intake, a suggested/correctable scope checklist,
-and complexity answers, feeding the three unchanged deterministic
-estimation engines (`src/complexity_engine.py`, `src/sizing_engine.py`,
+**EAP.M1.UI2**), **MVP.M2 — Phase and Resource Planning**, **MVP.M3 —
+Baseline Cost and Role Rate Card**, and **MVP.M4 — Commercial Scenario
+Pricing and Approval**: a guided, self-service 5-step Streamlit wizard
+(`app.py`) with a persistent left-side panel, that captures estimate
+intake, a suggested/correctable scope checklist, and complexity
+answers, feeding the three unchanged deterministic estimation engines
+(`src/complexity_engine.py`, `src/sizing_engine.py`,
 `src/contract_fit.py`) that compute weighted complexity, Relative Job
 Size / T-shirt size / sprint range, and contract-duration fit from
 governed JSON configuration under `data/`. It adds a differentiated
@@ -37,34 +38,44 @@ action-navigation row on the results screen, a deterministic
 explicitly not the governed MVP.M6 SOW capability), a deterministic
 **phase and resource planning** pair (`src/phase_planner.py`,
 `src/resource_planner.py`, unchanged since MVP.M2) that derives an
-editable phase/role/hours plan from the governed sizing result, and now
-a deterministic **baseline cost** engine (`src/pricing_engine.py`) that
-converts those role hours into baseline delivery cost using a
-configured rate card (`data/rate_card.csv`), with a session-only
-scenario-rate override per role and a pricing-readiness status — with
-no contingency, margin, markup, discount, or customer price anywhere.
-It establishes the separation of UI, engines, configuration, and data
-flow required by architecture-governance Gate 1.
+editable phase/role/hours plan from the governed sizing result, a
+deterministic **baseline cost** engine (`src/pricing_engine.py`,
+MVP.M3) that converts those role hours into baseline delivery cost
+using a configured rate card (`data/rate_card.csv`), and now a
+deterministic **commercial scenario pricing and approval** extension
+to the same engine (MVP.M4) that converts baseline delivery cost into
+four governed commercial scenarios (Recommended/Competitive/
+Conservative/Custom) using contingency and target margin only —
+customer price, gross profit, achieved margin, and equivalent markup,
+each independently editable, comparable, and requiring an explicit,
+auditable human approval before any one scenario may be treated as
+selected. No discount, rounding, or management-adjustment lever exists
+in this milestone. It establishes the separation of UI, engines,
+configuration, and data flow required by architecture-governance
+Gate 1.
 
 ## 4. Out-of-scope items
 
-No contingency, margin, commercial/customer pricing, support
-estimation, final/customer-approved SOW generation, or AI logic exists
-yet — all deferred to MVP.M4 through MVP.M7 and **not implemented in
-this repository**. Database, authentication, Docker, paid APIs, and
-Excel/PowerPoint export are out of scope for early milestones per
-`CLAUDE.md` and are not present here. The optional AI-capability intake
-field captured by the wizard (Step 2/4) drives an optional AI
-*workstream* in the phase/resource plan (MVP.M2) and now in baseline
-cost (MVP.M3), but still carries no commercial price, margin, or
-contingency anywhere — that remains MVP.M4 scope regardless of AI
-selection.
+No support estimation, final/customer-approved SOW generation, or AI
+logic exists yet — all deferred to MVP.M5 through MVP.M7 and **not
+implemented in this repository**. Database, authentication, Docker,
+paid APIs, and Excel/PowerPoint export are out of scope for early
+milestones per `CLAUDE.md` and are not present here. MVP.M4 explicitly
+does not implement: discount percentage/amount, coupon or promotional
+pricing, a strategic-loss exception pathway, additional scenario types
+beyond the four governed ones, or unlimited scenario creation. The
+optional AI-capability intake field captured by the wizard (Step 2/4)
+drives an optional AI *workstream* in the phase/resource plan (MVP.M2),
+baseline cost (MVP.M3), and now a Human-Review trigger on every
+commercial scenario (MVP.M4), but still carries no support pricing,
+recurring fees, final legal terms, or payment schedule anywhere — that
+remains MVP.M5/M6 scope regardless of AI selection.
 
 ## 5. Current project stage
 
-**Prototype** (MVP.M1-M3 complete). Complexity of this document
-matches that stage: MVP.M1-M3's engines and wizard are documented in
-full below; MVP.M4 onward are named only where relevant to note what
+**Prototype** (MVP.M1-M4 complete). Complexity of this document
+matches that stage: MVP.M1-M4's engines and wizard are documented in
+full below; MVP.M5 onward are named only where relevant to note what
 is deliberately deferred, not described as implemented.
 
 ## 6. Functional requirements
@@ -118,7 +129,11 @@ or duplicate the authoritative engines' formulas. MVP.M2 added
 phase/resource-effort engines, no rates or cost). MVP.M3 added
 `src/pricing_engine.py` (deterministic baseline-cost engine reading
 `data/rate_card.csv`, a new CSV-configuration source alongside the
-existing JSON files). This shape was chosen over a spreadsheet-first or
+existing JSON files). MVP.M4 extended the same `src/pricing_engine.py`
+(per `ENGINE-RESPONSIBILITIES.md` section 8's single-engine ownership
+of the whole pricing sequence) with the contingency-through-approval
+functions, reading a new JSON file, `data/commercial_pricing_defaults.json`.
+This shape was chosen over a spreadsheet-first or
 database-backed design because the project's explicit scope excludes a
 database and requires configurable-but-versioned business rules —
 CSV/JSON in source control gives that without added infrastructure
@@ -133,20 +148,22 @@ across independently-routed pages.
 - **`app.py`** — Streamlit UI only. Renders the 5-step wizard and
   persistent sidebar, calls the engines below with a structured
   `EstimateRequest`, and displays their results, including the
-  resource-plan and baseline-cost sections. Contains no complexity,
-  sizing, contract-fit, resource-planning, or pricing formulas itself.
+  resource-plan, baseline-cost, and commercial-pricing sections.
+  Contains no complexity, sizing, contract-fit, resource-planning, or
+  pricing formulas itself.
 - **`src/models.py`** — structured Pydantic models only
   (`EstimateRequest`, `ComplexityDimensionAnswer`, `ComplexityResult`,
   `SizingResult`, `ContractFitResult`, the MVP.M2 resource-planning
-  models, and the MVP.M3 pricing models `RateCardEntry`, `RoleCostRow`,
-  `BaselineCostResult`). No business calculations beyond trivial,
-  clearly-scoped field defaults.
+  models, the MVP.M3 pricing models `RateCardEntry`, `RoleCostRow`,
+  `BaselineCostResult`, and the MVP.M4 `PricingScenario` model). No
+  business calculations beyond trivial, clearly-scoped field defaults.
 - **`src/validators.py`** — reusable validation (score ranges, weight
   totals, sizing-band schema and boundary coverage, contract-duration
   positivity, AI-field validity, scope-checklist schema, required-field
   detection, rate-card schema, scenario-rate numeric/non-negative
-  validity, and override-reason requirement) shared by the engines and
-  the UI.
+  validity, override-reason requirement, and the MVP.M4 contingency/
+  target-margin/baseline-cost bounds plus the standalone commercial-loss
+  detector) shared by the engines and the UI.
 - **`src/config.py`** — generic JSON and CSV configuration loading.
   Raises a controlled `ConfigurationError` on any missing or malformed
   file; no engine falls back to a silently hard-coded value.
@@ -186,12 +203,15 @@ across independently-routed pages.
   Blocked` only at this milestone — see §19) and (2)
   `build_preliminary_sow_outline`, a deterministic, template-based
   21-section draft builder that reads only already-captured/validated
-  `EstimateRequest`/engine-result data, plus one boolean-only signal
-  (`baseline_costing_in_progress`, MVP.M3) that appends a fixed
-  status-only sentence. Never imports `RateCardEntry`, `RoleCostRow`,
-  `BaselineCostResult`, or the rate card — structurally cannot leak
-  pricing values into the outline. Not the governed `sow_generator.py`
-  described in `ENGINE-RESPONSIBILITIES.md` section 11 (MVP.M6).
+  `EstimateRequest`/engine-result data, plus two primitive-only signals:
+  `baseline_costing_in_progress` (MVP.M3, boolean) and
+  `approved_commercial_scenario_name` (MVP.M4, a plain string or
+  `None`) that each append one fixed status-only sentence. Never
+  imports `RateCardEntry`, `RoleCostRow`, `BaselineCostResult`, or
+  `PricingScenario` — structurally cannot leak pricing or commercial
+  values into the outline (verified directly by an AST-based test).
+  Not the governed `sow_generator.py` described in
+  `ENGINE-RESPONSIBILITIES.md` section 11 (MVP.M6).
 - **`src/phase_planner.py`** — selects phases by work type and derives
   each phase's duration in sprints from the governed sizing result
   (`SizingResult.max_sprints`, weighted per `data/phase_rules.json`),
@@ -205,7 +225,7 @@ across independently-routed pages.
   warnings (over-allocation, incompatible combinations, missing
   deployment/stabilization coverage, missing independent AI evaluation
   coverage). Does not apply rates or calculate cost or price.
-- **`src/pricing_engine.py`** (MVP.M3) — loads and validates
+- **`src/pricing_engine.py`** — MVP.M3 section: loads and validates
   `data/rate_card.csv` (`load_rate_card`); computes each role's cost
   (`total_estimated_hours * scenario_rate`), baseline delivery cost
   (sum of role costs), and the read-only blended hourly rate (`None`,
@@ -214,10 +234,24 @@ across independently-routed pages.
   override-reason state (`reset_role_rate`, `reset_all_rates`,
   `reconcile_rate_state`); and computes the pricing-readiness status
   (`Calculation Blocked` > `Human Review Required` > `Ready for
-  Baseline Review`, in that precedence). No contingency, margin,
-  markup, discount, or customer price anywhere in this module — that is
-  MVP.M4 scope. The rate card is read-only from the application's
-  perspective; scenario overrides never write back to the CSV file.
+  Baseline Review`, in that precedence). MVP.M4 section (additive, no
+  changes to the M3 functions above): loads/validates
+  `data/commercial_pricing_defaults.json` (`load_commercial_pricing_defaults`);
+  builds/resets the four governed scenarios (`build_default_scenarios`,
+  `reset_scenario_to_default`); computes contingency through equivalent
+  markup at full precision (`calculate_scenario_financials`); derives
+  commercial-readiness status and the independent approval-status axis
+  (`compute_commercial_readiness`, `compute_approval_status`);
+  orchestrates one scenario's full recalculation against the live
+  baseline (`recalculate_scenario`); detects baseline drift and
+  invalidates stale approval (`detect_baseline_drift`,
+  `refresh_scenario_staleness`); maps M2 delivery warnings to the two
+  governed EAP.M4 warning levels (`derive_delivery_risk_warnings`); and
+  gates an approval attempt (`approve_scenario`). No discount, rounding,
+  or management-adjustment lever, and no support pricing or final SOW
+  logic, anywhere in this module. Both the rate card and the commercial
+  defaults are read-only from the application's perspective; nothing
+  is ever written back to either file.
 - **`data/`** — governed JSON/CSV configuration only: complexity
   weights, the 7-dimension × 6-level answer scale, sizing bands,
   contract terms, the original 7-value estimate-type catalog (internal
@@ -228,10 +262,14 @@ across independently-routed pages.
   per phase, `hours_per_sprint`, the AI-activity-to-phase/role
   mapping), role-combination rules (compatible and incompatible
   combinations), the configured rate card (`rate_card.csv` —
-  illustrative/fictional demonstration rates only), the preliminary SOW
-  outline's responsibility/next-steps templates, and the original AI
-  workstream activity catalog (retained for the advanced/optional AI
-  section). No customer data, commercial data, real rates, or secrets.
+  illustrative/fictional demonstration rates only), the four governed
+  commercial scenario defaults plus maximum contingency and material-
+  difference thresholds (`commercial_pricing_defaults.json` —
+  explicitly flagged prototype commercial percentages), the preliminary
+  SOW outline's responsibility/next-steps templates, and the original
+  AI workstream activity catalog (retained for the advanced/optional AI
+  section). No customer data, commercial transaction data, real rates,
+  or secrets.
 - **`tests/`** — one test module per engine/validator/helper plus
   `test_app_wizard.py` (Streamlit `AppTest`-driven UI, sidebar, and
   transparency checks) and the original bootstrap smoke test.
@@ -322,6 +360,35 @@ fixed status sentence — never an amount, rate, or dollar figure
 (`sow_outline_engine.py` has no dependency on the pricing models to
 leak).
 
+**Commercial pricing flow (MVP.M4):** once a `BaselineCostResult`
+exists, `app.py` ensures the four governed `PricingScenario` objects
+exist (`pricing_engine.build_default_scenarios`, calculated immediately
+on first creation), then on every render compares each scenario's
+stored baseline snapshot to the live `BaselineCostResult`
+(`pricing_engine.refresh_scenario_staleness` /
+`detect_baseline_drift`) — a mismatch immediately clears approval and
+flags the scenario `needs_recalculation`, without altering its
+contingency/margin/name/description inputs or silently recomputing its
+stored dollar fields. Editing a scenario's contingency or target margin
+recalculates that one scenario immediately
+(`pricing_engine.recalculate_scenario`, which calls
+`calculate_scenario_financials` → `compute_commercial_readiness` →
+`compute_approval_status` in sequence) without touching any other
+scenario's values. Approving a scenario runs a separate gate
+(`pricing_engine.approve_scenario`) checked only at that moment —
+requires a non-empty approval note and, only when the corresponding
+warning list is non-empty, an explicit delivery-risk and/or commercial-
+risk acknowledgement checkbox; a commercial-loss condition
+(`customer_price < risk_adjusted_delivery_cost`, detected by
+`validators.detect_commercial_loss`) blocks unconditionally with no
+override. `app.py`'s approve-button click handler re-verifies
+`can_approve` itself rather than trusting the widget's `disabled=`
+attribute alone (a real gap found and fixed during implementation — see
+§19). Only the approved scenario's name (a plain string, never a
+`PricingScenario` object) passes into the preliminary SOW outline flow,
+appending one fixed sentence ("Commercial terms are subject to final
+review.") — never an amount, rate, cost, margin, or markup.
+
 No sensitive data, PII, or credentials are collected — inputs are
 structured selections, short business-objective text, and complexity
 answers only. Nothing is persisted beyond the browser session: no
@@ -388,6 +455,23 @@ items — governed by a fixed precedence (Blocked beats Human Review,
 which beats Ready) rather than any single condition silently winning.
 This is still not a commercial-approval workflow; no gross profit,
 margin, or customer price exists yet to approve (MVP.M4).
+
+The commercial-pricing section (MVP.M4) adds the first real,
+auditable **approval workflow** in this repository: each scenario
+carries an independent commercial-readiness axis (calculation
+cleanliness) and approval-status axis (human decision state — Draft /
+Review Required / Approved / Approval Blocked), and
+`pricing_engine.approve_scenario` requires an explicit human-entered
+approval note plus explicit acknowledgement of every applicable
+delivery-risk and commercial-risk warning before a scenario may become
+Approved — never inferred from price, never automatic, and never
+overridable by a note or acknowledgement when a commercial-loss
+condition exists. Exactly one scenario may be Approved at a time;
+replacing it is a separate explicit button click that preserves the
+previous scenario's inputs and calculations rather than deleting them.
+This is still not the governed final commercial approval that will
+feed `ApprovedEstimate` in MVP.M6 — no customer-facing output exists
+yet to approve toward.
 
 A **mandatory UI review checkpoint** now also applies at the process
 level (not a code review point, a milestone-acceptance gate): every
@@ -610,19 +694,95 @@ working tree.
   conditions to always win regardless of how many Human Review
   conditions are also present, verified directly by
   `test_blocked_takes_precedence_over_human_review_conditions`.
+- **Single-baseline, four-fixed-scenario commercial model, not
+  `PRICING-RULES.md` §11's Configured Baseline/Working/Draft model:**
+  the staged `prompts/work-estimation/mvp-m4-commercial-pricing.md`
+  prompt described per-scenario role-rate overrides plus a discount/
+  rounding/management-adjustment lever; the user's own explicit EAP.M4
+  instructions scoped this milestone to exactly four named scenarios
+  (Recommended/Competitive/Conservative/Custom) varying only
+  contingency and target margin on top of the single M3
+  `baseline_delivery_cost`, with no discount lever at all. Followed the
+  narrower, explicit instruction and flagged the divergence, the same
+  pattern already used and approved at M3.
+- **Full precision retained internally for M4's commercial formulas;
+  only UI display rounds to two decimals** — deliberately different
+  from M3's `pricing_engine.py` functions, which round
+  `baseline_delivery_cost`/`blended_hourly_rate` internally to two
+  decimals. Per the user's explicit "use full precision internally"
+  instruction specific to M4.
+- **Commercial readiness and approval status are independent axes,
+  confirmed explicitly (EAP.M4-D1 item 5):** a scenario may be "Ready
+  for Commercial Review" and still "Draft." Approval status mapping
+  (Approval Blocked whenever a blocking condition exists; Approved only
+  for the current `approved_scenario_id`; Review Required when
+  readiness is Human Review Required and not approved; Draft when
+  readiness is Ready and not approved) is this project's own
+  interpretation of the four named states, not literal text from the
+  milestone prompt — flagged for the user's confirmation during the
+  Change-Impact review and confirmed unchanged.
+- **Approval-note and warning-acknowledgement requirements are checked
+  only inside `approve_scenario`, never baked into a scenario's
+  `readiness_status`/`blocking_conditions`:** per EAP.M4-D1 items 3-4, a
+  missing note must never make an otherwise-valid Draft scenario
+  numerically invalid or block calculation/comparison — only an
+  approval attempt itself.
+- **Commercial-loss detection (`customer_price < risk_adjusted_delivery_cost`)
+  is implemented as a standalone, independently-tested guard even
+  though the governed formula makes it algebraically unreachable
+  through normal contingency/margin ranges alone** (margin in [0, 1)
+  and a non-negative risk-adjusted cost always yield price ≥ cost):
+  defensive validation per the user's explicit requirement, not a
+  trust assumption that the formula alone is sufficient protection.
+- **A real defect was found and fixed during implementation: the
+  Approve button's click handler originally relied solely on
+  Streamlit's `disabled=` attribute to prevent approval when
+  `can_approve` was `False`, with no re-check inside the handler
+  itself.** Testing via `AppTest.click()` showed a disabled button's
+  click can still register and execute its handler body. Fixed by
+  re-verifying `can_approve` inside the handler (`if st.button(...) and
+  can_approve:`) as defense-in-depth for an action this milestone
+  explicitly requires to never happen accidentally (commercial-loss
+  approval, missing-note approval).
+- **"High delivery risk" (one of MVP.M4's two governed delivery-warning
+  levels) is triggered by a simple keyword check (`"missing"` present
+  in an underlying M2 resource-plan warning) rather than a numeric
+  "insufficient hours" threshold:** no governed reference defines a
+  numeric threshold for what counts as insufficient phase hours, and
+  inventing one would be fabricating a business rule. Uses the same
+  lightweight-keyword-safeguard pattern already established and
+  accepted in `sow_outline_engine.py`'s risky-language scan — flagged
+  here for business review the same way.
+- **M3's `COMMERCIAL_BELOW_DEFAULT_WARNING` text is left completely
+  unedited in MVP.M4, even though its trailing "will be calculated in a
+  later milestone" sentence is now factually stale:** that string is a
+  validated financial-disclaimer label under `CLAUDE.md`'s Change-
+  Impact Gate, and the bypass rules explicitly exclude financial labels
+  and disclaimers from the typo/formatting-only shortcut. No change to
+  its wording was requested during EAP.M4's Change-Impact review, so it
+  was left verbatim; the resulting gross profit and achieved margin are
+  now shown alongside it in the UI instead, per the user's instruction.
 
 ## 20. Known limitations
 
-- No contingency, margin, commercial/customer pricing, support, final/
-  customer-approved SOW, or AI logic exists — this document describes
-  MVP.M1 through MVP.M3 only, per the milestone-discipline rule in
-  `CLAUDE.md`. The preliminary SOW outline (EAP.M1.UI2) is explicitly a
-  draft-only, always-human-review-required artifact, not the governed
-  MVP.M6 capability.
-- `data/rate_card.csv`'s rates are fictional/illustrative demonstration
-  values authored for this prototype, not real commercial rates — per
-  `GUARDRAILS.md` §3 and `PRICING-RULES.md` §9, flagged for business
-  review before any real commercial use.
+- No support pricing, final/customer-approved SOW, or AI logic exists —
+  this document describes MVP.M1 through MVP.M4 only, per the
+  milestone-discipline rule in `CLAUDE.md`. The preliminary SOW outline
+  (EAP.M1.UI2) is explicitly a draft-only, always-human-review-required
+  artifact, not the governed MVP.M6 capability.
+- `data/rate_card.csv`'s rates and `data/commercial_pricing_defaults.json`'s
+  contingency/margin percentages are fictional/illustrative
+  demonstration values authored for this prototype, not real commercial
+  rates or policy — per `GUARDRAILS.md` §3 and `PRICING-RULES.md` §9,
+  both files are explicitly flagged for business review before any real
+  commercial use.
+- MVP.M4's commercial scenarios, like MVP.M2's resource plan and
+  MVP.M3's baseline cost before them, are session-only: refreshing or
+  restarting the app loses all scenario edits and approval state, per
+  `PRICING-RULES.md` §17. This is expected MVP behavior, not a defect.
+- "High delivery risk" detection (see §19) is a simple keyword check
+  against M2's existing warning text, not a governed numeric threshold
+  for insufficient phase hours — flagged for business review.
 - The resource-plan editor lets duration be edited per row rather than
   once per phase (see §19) — editing one role's row for a phase does
   not propagate to other roles in that same phase automatically.
@@ -655,19 +815,21 @@ working tree.
 
 ## 21. Future considerations
 
-- MVP.M4 introduces commercial pricing: contingency, target margin,
-  gross profit, discounts/adjustments, and the proposed customer price,
-  built on top of MVP.M3's `BaselineCostResult.baseline_delivery_cost`.
-  MVP.M5 introduces support estimation (warranty, maintenance,
-  enhancement support). Neither exists in this repository yet.
-- MVP.M3's baseline cost (like MVP.M2's resource plan before it) is
-  currently regenerated fresh each render and not itself part of
-  `EstimateRequest` — MVP.M4 will need to decide whether the baseline
-  cost becomes a persisted-in-session, human-approved input (mirroring
-  `PRICING-RULES.md` §11's scenario model) rather than a recomputed-on-
-  render view, and whether a real multi-scenario (Configured Baseline/
-  Working/Draft) model belongs there instead of MVP.M3's single
-  current-scenario simplification (see §19).
+- MVP.M5 introduces support estimation (warranty, maintenance,
+  enhancement support, including combined first-year contract value for
+  scenarios such as Implementation plus Support), reusing MVP.M4's
+  pricing formulas rather than redefining them, per
+  `ENGINE-RESPONSIBILITIES.md` section 9. Not present in this
+  repository yet.
+- MVP.M4's `PricingScenario` objects are currently regenerated/
+  recalculated in `st.session_state` and not themselves part of
+  `EstimateRequest` — MVP.M6 will need to decide how the Approved
+  scenario feeds `ApprovedEstimate` (per `PRICING-RULES.md` §16, "the
+  Approved scenario is how `ApprovedEstimate`'s values get populated"),
+  and whether a real multi-scenario (Configured Baseline/Working/Draft)
+  model with per-scenario role-rate overrides and a discount/rounding/
+  management-adjustment lever belongs there instead of MVP.M4's four-
+  fixed-scenario, contingency-and-margin-only simplification (see §19).
 - MVP.M6 introduces the governed, final SOW capability
   (`sow_generator.py`) and customer-facing output, and will require
   revisiting §9's internal/customer-view separation, since this

@@ -1,0 +1,32 @@
+{
+  "_prototype_warning": "All percentages in this file are configurable prototype commercial defaults authored for this milestone (EAP.M4), grounded loosely in PRICING-RULES.md section 4's illustrative contingency guidance and section 3's worked 30% margin example. They are NOT approved commercial policy and must be reviewed by business stakeholders before any real-world quote is generated from them.",
+  "max_contingency_percentage": 0.50,
+  "material_difference_threshold_contingency": 0.05,
+  "material_difference_threshold_margin": 0.05,
+  "scenarios": {
+    "recommended": {
+      "scenario_name": "Recommended",
+      "scenario_description": "Balanced commercial position: moderate contingency for typical delivery uncertainty, target margin aligned to the configured commercial baseline.",
+      "contingency_percentage": 0.10,
+      "target_margin_percentage": 0.30
+    },
+    "competitive": {
+      "scenario_name": "Competitive",
+      "scenario_description": "Lower contingency and target margin than Recommended, for price-sensitive situations. Always requires human review before approval.",
+      "contingency_percentage": 0.05,
+      "target_margin_percentage": 0.20
+    },
+    "conservative": {
+      "scenario_name": "Conservative",
+      "scenario_description": "Higher contingency and target margin than Recommended, for engagements with significant uncertainty, dependencies, or delivery risk.",
+      "contingency_percentage": 0.20,
+      "target_margin_percentage": 0.35
+    },
+    "custom": {
+      "scenario_name": "Custom",
+      "scenario_description": "User-defined contingency and target margin, starting from the Recommended scenario's values. Requires an explanation when materially different from Recommended.",
+      "contingency_percentage": 0.10,
+      "target_margin_percentage": 0.30
+    }
+  }
+}

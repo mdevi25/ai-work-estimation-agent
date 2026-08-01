@@ -10,7 +10,7 @@ import math
 from typing import Optional
 
 from src.config import ConfigurationError
-from src.models import COMPLEXITY_DIMENSION_KEYS
+from src.models import COMPLEXITY_DIMENSION_KEYS, SCENARIO_IDS
 
 FIBONACCI_RELATIVE_JOB_SIZES = (1, 2, 3, 5, 8, 13, 20)
 TSHIRT_SIZES = ("XS", "S", "M", "L", "XL", "Epic")
@@ -369,3 +369,105 @@ def validate_override_reason(scenario_rate: float, default_rate: float, override
             "An override reason is required when the scenario rate differs from the "
             "configured default rate"
         )
+
+
+# --- MVP.M4: commercial scenario pricing -------------------------------------
+
+
+def validate_contingency_percentage(value: object, max_contingency_percentage: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Contingency percentage must be numeric")
+    if math.isnan(value):
+        raise ValueError("Contingency percentage must be numeric")
+    if value < 0:
+        raise ValueError(f"Contingency percentage cannot be negative, got {value}")
+    if value > max_contingency_percentage:
+        raise ValueError(
+            f"Contingency percentage {value:.2%} exceeds the maximum permitted "
+            f"{max_contingency_percentage:.2%}"
+        )
+    return float(value)
+
+
+def validate_target_margin_percentage(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Target margin percentage must be numeric")
+    if math.isnan(value):
+        raise ValueError("Target margin percentage must be numeric")
+    if value < 0:
+        raise ValueError(f"Target margin percentage cannot be negative, got {value}")
+    if value >= 1:
+        raise ValueError(f"Target margin percentage must be below 100%, got {value:.2%}")
+    return float(value)
+
+
+def validate_baseline_delivery_cost(value: object) -> float:
+    if value is None:
+        raise ValueError("Baseline delivery cost is missing")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Baseline delivery cost must be numeric")
+    if math.isnan(value):
+        raise ValueError("Baseline delivery cost must be numeric")
+    if value < 0:
+        raise ValueError(f"Baseline delivery cost cannot be negative, got {value}")
+    return float(value)
+
+
+def validate_commercial_pricing_defaults(data: dict) -> None:
+    max_contingency = data.get("max_contingency_percentage")
+    if (
+        not isinstance(max_contingency, (int, float))
+        or isinstance(max_contingency, bool)
+        or not 0 < max_contingency <= 1
+    ):
+        raise ConfigurationError(
+            "commercial_pricing_defaults.json's max_contingency_percentage must be between 0 and 1"
+        )
+
+    for threshold_key in (
+        "material_difference_threshold_contingency",
+        "material_difference_threshold_margin",
+    ):
+        threshold = data.get(threshold_key)
+        if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not 0 <= threshold < 1:
+            raise ConfigurationError(
+                f"commercial_pricing_defaults.json's {threshold_key} must be between 0 and 1"
+            )
+
+    scenarios = data.get("scenarios")
+    if not scenarios or set(scenarios.keys()) != set(SCENARIO_IDS):
+        raise ConfigurationError(
+            f"commercial_pricing_defaults.json must define scenarios for exactly: {sorted(SCENARIO_IDS)}"
+        )
+    for scenario_id, entry in scenarios.items():
+        if not entry.get("scenario_name") or not entry.get("scenario_description"):
+            raise ConfigurationError(
+                f"commercial_pricing_defaults.json scenario '{scenario_id}' is missing a name or description"
+            )
+        try:
+            validate_contingency_percentage(entry.get("contingency_percentage"), max_contingency)
+        except ValueError as exc:
+            raise ConfigurationError(
+                f"commercial_pricing_defaults.json scenario '{scenario_id}': {exc}"
+            ) from exc
+        try:
+            validate_target_margin_percentage(entry.get("target_margin_percentage"))
+        except ValueError as exc:
+            raise ConfigurationError(
+                f"commercial_pricing_defaults.json scenario '{scenario_id}': {exc}"
+            ) from exc
+
+
+def detect_commercial_loss(customer_price: Optional[float], risk_adjusted_delivery_cost: Optional[float]) -> bool:
+    """True when the proposed customer price would be below the calculated
+    delivery cost -- an expected-loss scenario that must remain Approval
+    Blocked with no override pathway (EAP.M4-D1 item 7). Standalone and
+    independently testable: the governed formula makes this unreachable
+    through normal contingency/margin ranges alone (margin in [0, 1) and a
+    non-negative risk-adjusted cost always yield price >= cost), but this
+    guard is evaluated on the computed values regardless, as a defensive
+    invariant check rather than a trust assumption.
+    """
+    if customer_price is None or risk_adjusted_delivery_cost is None:
+        return False
+    return customer_price < risk_adjusted_delivery_cost

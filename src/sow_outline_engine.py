@@ -195,6 +195,7 @@ def build_preliminary_sow_outline(
     generated_at: str,
     resource_plan: Optional[ResourcePlanResult] = None,
     baseline_costing_in_progress: bool = False,
+    approved_commercial_scenario_name: Optional[str] = None,
 ) -> list[tuple[str, str]]:
     """Build the preliminary outline (21 sections, or 22 when a resource
     plan is supplied -- see the optional "Preliminary phase and resource
@@ -212,6 +213,14 @@ def build_preliminary_sow_outline(
     ("Baseline internal costing is under review.") to the Document status
     section; no amount, rate, cost, blended rate, override reason, or
     commercial warning is ever included (EAP.M3-D1 correction 6).
+
+    `approved_commercial_scenario_name` (MVP.M4) is a plain string or
+    `None` -- this function never receives a `PricingScenario` object, a
+    customer price, baseline cost, contingency, gross profit, margin,
+    markup, internal rate, or approval note. When provided, it appends the
+    scenario's name plus the fixed sentence "Commercial terms are subject
+    to final review." to the Document status section; no dollar figure is
+    ever included (EAP.M4-D1 item 2).
     """
     templates = _load_outline_templates()
 
@@ -248,6 +257,11 @@ def build_preliminary_sow_outline(
     document_status_text = "Preliminary Draft. " + GATE_SUCCESS_MESSAGE
     if baseline_costing_in_progress:
         document_status_text += " Baseline internal costing is under review."
+    if approved_commercial_scenario_name:
+        document_status_text += (
+            f" Approved commercial scenario: {approved_commercial_scenario_name}. "
+            "Commercial terms are subject to final review."
+        )
 
     sections: list[tuple[str, str]] = []
     sections.append(("Document status", document_status_text))

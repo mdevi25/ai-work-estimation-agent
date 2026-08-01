@@ -459,3 +459,155 @@ handoff.
 **Source:** EAP.M3, run from the live repository root, following
 approval of the pre-edit 13-point Change-Impact Report and the ten
 corrections in EAP.M3-D1.
+
+## 2026-07-31 -- Commercial scenario pricing and approval (EAP.M4)
+
+**Decisions confirmed:**
+
+- Added `data/commercial_pricing_defaults.json`: four governed scenario
+  defaults (Recommended 10%/30%, Competitive 5%/20%, Conservative
+  20%/35%, Custom starts as a copy of Recommended), a maximum permitted
+  contingency (50%), and material-difference thresholds (5 percentage
+  points) for both contingency and target margin. All percentages are
+  explicitly flagged in the file as configurable prototype values
+  requiring business review before real-world use, grounded loosely in
+  `PRICING-RULES.md` section 4's illustrative contingency table and
+  section 3's worked 30%-margin example.
+- **Single-baseline, four-fixed-scenario model, not `PRICING-RULES.md`
+  section 11's Configured Baseline/Working/Draft model**: per the
+  user's explicit EAP.M4 instructions (narrower than the staged
+  `prompts/work-estimation/mvp-m4-commercial-pricing.md` prompt), no
+  per-scenario role-rate override and no discount/rounding/management-
+  adjustment lever exist in this milestone -- `customer_price` is the
+  direct output of contingency and target margin on top of the single
+  M3 `baseline_delivery_cost` only. Confirmed and flagged as a
+  deliberate divergence, the same pattern already used at M3
+  (EAP.M4-D1 item 1).
+- Extended `src/pricing_engine.py` (not a new file) with the full
+  contingency-through-approval sequence, per `ENGINE-RESPONSIBILITIES.md`
+  section 8 assigning this whole sequence to one engine. Implemented
+  exactly:
+  `contingency_amount = baseline_delivery_cost * contingency_percentage`;
+  `risk_adjusted_delivery_cost = baseline_delivery_cost + contingency_amount`;
+  `customer_price = risk_adjusted_delivery_cost / (1 - target_margin_percentage)`;
+  `gross_profit = customer_price - risk_adjusted_delivery_cost`;
+  `achieved_margin = gross_profit / customer_price` (`None`, never a
+  fabricated `0/0`, when `customer_price` is 0);
+  `equivalent_markup = (customer_price - risk_adjusted_delivery_cost) / risk_adjusted_delivery_cost`
+  (`None` when `risk_adjusted_delivery_cost` is 0). **Full precision is
+  retained internally; only UI display rounds to two decimals** -- a
+  deliberate difference from M3's `pricing_engine.py` functions, which
+  round internally, per the user's explicit "use full precision
+  internally" instruction for M4.
+- Added `PricingScenario` to `src/models.py` with every field the user
+  specified (scenario id/name/description, contingency and target
+  margin percentages, contingency amount, risk-adjusted cost, customer
+  price, gross profit, achieved margin, equivalent markup, a baseline
+  snapshot pair for drift detection, readiness status, approval status,
+  approval reason, two warning-acknowledgement flags, created/
+  recalculated timestamps, `needs_recalculation`/`stale_reason`, and
+  separate validation-warning/blocking-condition lists). Removed a
+  stale module-level docstring reference in `models.py` to the
+  `RoleRatePreviewRow`/`RoleRatePreviewSet` scaffolding already deleted
+  at M3.
+- **Commercial readiness** (`Ready for Commercial Review` / `Human
+  Review Required` / `Approval Blocked`, Blocked-first precedence) and
+  **approval status** (`Draft` / `Review Required` / `Approved` /
+  `Approval Blocked`) are two independent axes, confirmed explicitly
+  (EAP.M4-D1 item 5): a scenario may be "Ready for Commercial Review"
+  and still "Draft." Implemented mapping: Approval Blocked whenever a
+  blocking condition exists; Approved only for the current
+  `approved_scenario_id`; Review Required when readiness is Human
+  Review Required and not approved; Draft when readiness is Ready and
+  not approved. Human-Review triggers implemented exactly per spec
+  (rate overrides, material contingency/margin difference from
+  Recommended, delivery warnings, AI workstream, Customer-defined
+  staffing, unresolved scope, the Competitive scenario always, zero
+  contingency, zero target margin); zero baseline delivery cost is a
+  Human-Review trigger, never a block, and never a silently "Ready"
+  result.
+- **Approval-note and warning-acknowledgement requirements apply only
+  at the moment of an approval attempt** (EAP.M4-D1 items 3-4), via a
+  separate `approve_scenario` gate function -- never baked into
+  `readiness_status`/`blocking_conditions`, so a missing note never
+  makes an otherwise-valid Draft scenario numerically invalid or
+  blocks calculation/comparison.
+- **Commercial-loss detection** (`customer_price < risk_adjusted_delivery_cost`)
+  is a standalone, independently-tested guard (`detect_commercial_loss`
+  in `validators.py`) even though the fixed formula makes it
+  algebraically unreachable through normal contingency/margin ranges
+  alone (margin in [0,1) and non-negative cost always yield price >=
+  cost) -- implemented as defensive validation per the user's explicit
+  requirement. A commercial-loss scenario is always Approval Blocked
+  with no note, acknowledgement, or exception able to override it
+  (EAP.M4-D1 item 7) -- confirmed as a real defect risk during
+  implementation: the first draft's approve button relied solely on
+  Streamlit's `disabled=` attribute with no re-check inside the click
+  handler; fixed to re-verify `can_approve` inside the handler itself
+  as defense-in-depth, since a disabled-button click can bypass the
+  `disabled` attribute under `AppTest` (and, defensively, should never
+  be trusted as the only gate for an irreversible action).
+- **Baseline-drift invalidation**: each scenario snapshots the
+  `baseline_delivery_cost`/`readiness_status` it was last calculated
+  against; every render compares that snapshot to the live
+  `BaselineCostResult` (`detect_baseline_drift`) and, on any mismatch,
+  immediately clears approval and flags `needs_recalculation` with a
+  visible reason (`refresh_scenario_staleness`) -- without silently
+  recomputing the scenario's stored dollar fields. This one generic
+  comparison covers role-rate changes, hours changes, resource-plan
+  changes, and AI on/off transitions alike, since all of them change
+  `baseline_delivery_cost` or its readiness status on the live M3
+  result -- no special-casing needed per trigger type (EAP.M4-D1 item
+  8). Editing a scenario's own contingency/margin, by contrast,
+  recalculates immediately using its existing baseline snapshot.
+- Two new delivery-risk warning texts (`DELIVERY_RISK_WARNING`,
+  `HIGH_DELIVERY_RISK_WARNING`) and the exact `COMMERCIAL_LOSS_WARNING`
+  text are used verbatim as specified. `derive_delivery_risk_warnings`
+  maps M2's resource-plan warnings to these two levels; "High delivery
+  risk" fires when any underlying M2 warning text contains "missing"
+  (a simple keyword heuristic, the same lightweight-safeguard pattern
+  already used in `sow_outline_engine.py`'s risky-language scan, not a
+  numeric threshold invented for this milestone -- flagged for business
+  review). M3's `COMMERCIAL_BELOW_DEFAULT_WARNING` text is carried
+  forward completely unedited (its trailing "will be calculated in a
+  later milestone" sentence is now stale now that M4 exists, but
+  editing a validated financial-disclaimer string requires its own
+  full Change-Impact Gate pass per `CLAUDE.md`'s bypass exclusions, and
+  no such change was requested) -- gross profit and achieved margin are
+  now shown alongside it in the UI instead, per the user's instruction.
+- Extended `src/sow_outline_engine.py`'s `build_preliminary_sow_outline`
+  with one new optional parameter, `approved_commercial_scenario_name:
+  Optional[str]` -- a plain string, never a `PricingScenario` object.
+  When provided, appends only the scenario's name plus the fixed
+  sentence "Commercial terms are subject to final review." to the
+  Document status section; no customer price, baseline cost,
+  contingency, gross profit, margin, markup, internal rate, or approval
+  note is ever included (EAP.M4-D1 item 2). The module structurally
+  still never imports `PricingScenario`/`BaselineCostResult`/
+  `RoleCostRow`/`RateCardEntry` -- verified directly via a new AST-based
+  test (`test_sow_outline_engine_never_imports_pricing_scenario_model`),
+  the same structural-impossibility approach used for M3's boundary.
+- UI: a "Commercial pricing" section renders after Baseline Cost
+  (gated on a `BaselineCostResult` existing) with a side-by-side
+  comparison table plus one expander per scenario (editable contingency
+  %, target margin %, and -- Custom only -- name/description; per-
+  scenario Recalculate and Reset-to-defaults; approval note, warning
+  acknowledgements, and Approve/Replace-approval/Remove-approval
+  controls; a "How was customer price calculated?" expander with
+  substituted values and both the difference-from-Recommended and
+  difference-from-baseline). Scenarios are calculated immediately on
+  first creation (not left at a blank `customer_price: None` requiring
+  a manual click) -- this is ordinary initial computation, not the
+  "recalculate only after explicit action" rule, which governs
+  baseline-drift recalculation specifically.
+- No change to `src/complexity_engine.py`, `src/sizing_engine.py`,
+  `src/contract_fit.py`, `src/phase_planner.py`, or `src/resource_planner.py`.
+  M3's existing `pricing_engine.py` functions (`load_rate_card`,
+  `build_baseline_cost`, `reset_role_rate`, `reset_all_rates`,
+  `reconcile_rate_state`) are unmodified -- M4 only adds new functions
+  to the same file. No support pricing, final SOW, export functionality,
+  database, authentication, or persistence was introduced.
+
+**Source:** EAP.M4, run from the live repository root, following
+approval of the pre-edit 15-point Change-Impact Report and the ten
+numbered confirmations in EAP.M4-D1.
